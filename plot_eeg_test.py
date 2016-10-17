@@ -8,6 +8,9 @@ import scipy.signal as sig
 import scipy.io.wavfile
 import math
 
+
+
+
 def lowpass(data, cutoff, fs, order=5):
     # TODO check dimensions
     nyq = 0.5 * fs
@@ -141,28 +144,115 @@ def truncate_to_range(x, t, t_range):
         new_t = new_t[range_indices[0]:range_indices[1]]
     return (new_x, new_t)
 
+def are_intervals_close(time_array, value):
+    return (np.isclose((time_array[1:] - time_array[:-1]), value).all())
+
 def load_openephys(folder, filename, Fs_openephys):
-    # TODO are these timestamps correct?
+    # always constant for openephys format, at least as of now
+    SAMPLES_PER_RECORD = 1024
     all = ep.loadContinuous(folder + filename)
+    header = all['header']
+    sampleRate = int(header['sampleRate'])
+    if sampleRate != Fs_openephys:
+        raise RuntimeError('load_openephys: unexpected sample rate')
+
     x = all['data']
+
+    # get timestamps for each record
     timestamps = all['timestamps']
-    t = np.array([np.arange(time, time+1024) for time in timestamps]).flatten() / Fs_openephys
-    # print(np.array(t))
-    # t_old = np.arange(timestamps[0], timestamps[-1]+1024, 1) / Fs_openephys
-    # assert (np.array_equal(t, t_old))
+    # compute timestamps for each sample - I think this is the right way...
+    t = np.array([np.arange(time, time+1024) for time in timestamps]).flatten() / sampleRate
+    if not are_intervals_close(t, 1/sampleRate):
+        raise RuntimeError('load_openephys: timestamps may be wrong')
     return (x,t)
 
+# def threshold_debounce(x, threshold, min_samples_per_chunk):
+#     # Threshold the signal to 1 and 0
+#     # Remove any high/low periods that are shorter than min_samples_per_chunk
+#     # Do not remove a short leading period at the very beginning of the array
+#     hi_indices = x > threshold
+
+#     x_new = np.zeros(x.shape)
+#     x_new[hi_indices] = 1
+#     start_index = -1
+#     last_val = x_new[0]
+#     for i in range(1, len(x_new)-1):
+#         # print(start_index)
+#         if x_new[i] != x_new[i-1]:
+#             # transition!
+#             if (start_index > 0) and (i - start_index < min_samples_per_chunk):
+#                 x_new[start_index:i] = x_new[i]
+#             else:
+#                 start_index = i
+#     return x_new
+
+def debounce_discrete_signal(x, min_samples_per_chunk):
+    # Remove any bounces that are shorter than min_samples_per_chunk
+    # Do not remove a short leading bounce at the very beginning of the array
+    start_index = -1
+    x_new = x.copy()
+    num_bounces_removed = 0
+    for i in range(1, len(x_new)-1):
+        # print(start_index)
+        if x_new[i] != x_new[i-1]:
+            # transition!
+            if (start_index > 0) and (i - start_index < min_samples_per_chunk):
+                x_new[start_index:i] = x_new[i]
+                num_bounces_removed += 1
+            else:
+                start_index = i
+    if num_bounces_removed > 0:
+        print('debounce_discrete_signal: removed %d bounces' % num_bounces_removed)
+    return x_new
+
+def plot_chunk_length_histogram(x_chunk, t_chunk):
+    interval_lengths = [] # won't include final interval
+    start_index = -1
+    for i in range(1, len(x_chunk)-1):
+        if x_chunk[i] != x_chunk[i-1]:
+            # transition!
+            if start_index > 0:
+                interval_lengths.append(t_chunk[i] - t_chunk[start_index])
+            start_index = i
+    plt.hist(interval_lengths[2:])
+    plt.xlabel("chunk length (s)")
+    plt.title("Inconsistent motion sample period: 2016-9-27 test recording")
+    plt.show()
+    exit(3)
+
+
+# a = np.array([ 0, 1, 1, 1, 0, 2, 2, 2, 2, 1,1,1, 3, 3, 3, 0, 0, 0, 0]) * 1.0
+# print(a)
+# print(debounce_discrete_signal( a , 2, 3))
+# exit(3)
+
+def threshold_01(x, threshold):
+    hi_indices = x > threshold
+    x_new = np.zeros(x.shape)
+    x_new[hi_indices] = 1
+    return x_new
+
 def get_chunk_nums(x_chunk_pin1, t_chunk_pin1, x_chunk_pin2, t_chunk_pin2):
-    # TODO debounce properly instead of thresholding, there's some noise in the chunk pin lines
     voltage_threshold = 2.0
+    min_samples_per_chunk = 10
+
+    # sanity check the dimensions
     assert(np.array_equal(t_chunk_pin1, t_chunk_pin2))
+
     t_chunk = t_chunk_pin1.copy()
     x_chunk = np.zeros(t_chunk.shape)
 
-    hi1_indices = x_chunk_pin1 > voltage_threshold
-    hi2_indices = x_chunk_pin2 > voltage_threshold
-    x_chunk[hi1_indices] += 1
-    x_chunk[hi2_indices] += 2
+    # threshold the analog recordings
+    x_chunk_pin1_clean = threshold_01(x_chunk_pin1, voltage_threshold)
+    x_chunk_pin2_clean = threshold_01(x_chunk_pin2, voltage_threshold)
+
+    # Calculate the chunk nums encoded by the pins
+    x_chunk = x_chunk_pin1_clean + 2*x_chunk_pin2_clean
+
+    # Debounce, because the 2 chunk pins don't change simultaneously, and
+    #  sometimes the sample falls between the 2 change times.
+    x_chunk = debounce_discrete_signal(x_chunk, min_samples_per_chunk)
+    plot_chunk_length_histogram(x_chunk, t_chunk)
     return (x_chunk, t_chunk)
 
 def find_enable_index(x_chunk, t_chunk):
@@ -221,7 +311,7 @@ def load_motion(folder, filename, Fs_openephys, Fs_motion):
 
     return (x_motion0, x_motion1, x_motion2, t_motion)
 
-def main():
+def make_bad_plots():
     folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
     Fs_openephys = 30000
     Fs_motion = 100 # motion sample rate in Hz
@@ -293,4 +383,48 @@ def main():
 
     # save_wav(xlow, "audio_test.wav")
 
-main()
+
+def test_timing():
+    # ax1 = fig.add_subplot(5,1,1)
+    fig = plt.figure()
+    ax1 = fig.gca()
+
+
+    folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
+
+    Fs_openephys = 30000
+    Fs_motion = 100 # motion sample rate in Hz
+
+    (x_chunk_pin1, t_chunk_pin1) = load_openephys(folder, "100_ADC6_2.continuous", Fs_openephys)
+
+    # plt.hist(tdiffs, bins=1000)
+    # plot_time(ax1, tdiffs, range(len(tdiffs)), xlabel='', ylabel='chunk 1')
+    # plot_time(ax1, t_chunk_pin1, range(len(t_chunk_pin1)), xlabel='', ylabel='chunk 1')
+
+    (x_chunk_pin2, t_chunk_pin2) = load_openephys(folder, "100_ADC7_2.continuous", Fs_openephys)
+    (x_chunk, t_chunk) = get_chunk_nums(x_chunk_pin1, t_chunk_pin1, x_chunk_pin2, t_chunk_pin2)
+    # plot_time(ax1, x_chunk_pin1, t_chunk_pin1, xlabel='', ylabel='chunk nums')
+    plot_time(ax1, x_chunk, t_chunk, xlabel='', ylabel='chunk nums')
+    plt.show()
+
+    exit(3)
+    plot_time(ax1, x_chunk_pin1, t_chunk_pin1, xlabel='', ylabel='chunk 1')
+    plot_time(ax1, x_chunk_pin2, t_chunk_pin2, xlabel='', ylabel='chunk 2')
+
+    # plot_quaternion(ax3, x_motion0, t_motion, xlim=t_range, xlabel='', ylabel='Hand Orientation ')
+    # plot_quaternion(ax4, x_motion1, t_motion, xlim=t_range, xlabel='', ylabel='Forearm Orientation  ')
+    # plot_quaternion(ax5, x_motion2, t_motion, xlim=t_range, ylabel='Upper Arm Orientation ')
+    plt.show()
+
+    # (x_motion0, x_motion1, x_motion2, t_motion) = load_motion(folder, "motion9-27-16_2.txt", Fs_openephys, Fs_motion)
+
+    # print(x_motion0.shape)
+    # print(t_motion.shape)
+
+
+
+
+test_timing()
+
+# def main():
+# main()
