@@ -9,8 +9,6 @@ import scipy.io.wavfile
 import math
 
 
-
-
 def lowpass(data, cutoff, fs, order=5):
     # TODO check dimensions
     nyq = 0.5 * fs
@@ -67,44 +65,15 @@ def calc_and_plot_spectrogram(axes, data, t, Fs, freq_range=None, title='',
                      xlabel=xlabel, ylabel=ylabel, zlabel=zlabel)
 
 def plot_quaternion(axes, x_motion, t_motion, title='', xlabel='Time (s)', ylabel='Amplitude',
-                    linestyle='solid', marker=None, linewidth=1, xlim=None, ylim=None, color=None, index_range=None):
-    if(not index_range):
-        plot_time(axes, x_motion[0, :], t_motion, title=title, xlabel=xlabel,
-                  ylabel=ylabel, linestyle=linestyle, marker=marker,
-                  linewidth=linewidth, xlim=xlim, ylim=ylim, color=color)
-
-        plot_time(axes, x_motion[1, :], t_motion, title=title, xlabel=xlabel,
-                  ylabel=ylabel, linestyle=linestyle, marker=marker,
-                  linewidth=linewidth, xlim=xlim, ylim=ylim, color=color)
-
-        plot_time(axes, x_motion[2, :], t_motion, title=title, xlabel=xlabel,
-                  ylabel=ylabel, linestyle=linestyle, marker=marker,
-                  linewidth=linewidth, xlim=xlim, ylim=ylim, color=color)
-
-        plot_time(axes, x_motion[3, :], t_motion, title=title, xlabel=xlabel,
-                  ylabel=ylabel, linestyle=linestyle, marker=marker,
-                  linewidth=linewidth, xlim=xlim, ylim=ylim, color=color)
-
-    else:
-        plot_time(axes, x_motion[0, index_range[0]:index_range[1]],
-                  t_motion[index_range[0]:index_range[1]], title=title, xlabel=xlabel,
-                  ylabel=ylabel, linestyle=linestyle, marker=marker,
-                  linewidth=linewidth, xlim=xlim, ylim=ylim, color=color)
-
-        plot_time(axes, x_motion[1, index_range[0]:index_range[1]],
-                  t_motion[index_range[0]:index_range[1]], title=title, xlabel=xlabel,
-                  ylabel=ylabel, linestyle=linestyle, marker=marker,
-                  linewidth=linewidth, xlim=xlim, ylim=ylim, color=color)
-
-        plot_time(axes, x_motion[2, index_range[0]:index_range[1]],
-                  t_motion[index_range[0]:index_range[1]], title=title, xlabel=xlabel,
-                  ylabel=ylabel, linestyle=linestyle, marker=marker,
-                  linewidth=linewidth, xlim=xlim, ylim=ylim, color=color)
-
-        plot_time(axes, x_motion[3, index_range[0]:index_range[1]],
-                  t_motion[index_range[0]:index_range[1]], title=title, xlabel=xlabel,
-                  ylabel=ylabel, linestyle=linestyle, marker=marker,
-                  linewidth=linewidth, xlim=xlim, ylim=ylim, color=color)
+                    linestyle='solid', marker=None, linewidth=1, xlim=None, ylim=None, color=None, index_range=[None,None]):
+    # Plot each sensor, in the first dimension of x_motion
+    for i in range(x_motion.shape[0]):
+        plot_time(axes,
+                  x_motion[i, index_range[0]:index_range[1]],
+                  t_motion[index_range[0]:index_range[1]],
+                  title=title, xlabel=xlabel, ylabel=ylabel, linestyle=linestyle,
+                  marker=marker, linewidth=linewidth, xlim=xlim, ylim=ylim,
+                  color=color)
 
 
 def plot_time(axes, data, t, title='', xlabel='Time (s)', ylabel='Amplitude',
@@ -252,14 +221,15 @@ def get_chunk_nums(x_chunk_pin1, t_chunk_pin1, x_chunk_pin2, t_chunk_pin2):
     # Debounce, because the 2 chunk pins don't change simultaneously, and
     #  sometimes the sample falls between the 2 change times.
     x_chunk = debounce_discrete_signal(x_chunk, min_samples_per_chunk)
-    plot_chunk_length_histogram(x_chunk, t_chunk)
+    # plot_chunk_length_histogram(x_chunk, t_chunk)
     return (x_chunk, t_chunk)
 
-def find_enable_index(x_chunk, t_chunk):
+def find_enable_index(x_chunk):
     # TODO use enable signal instead, I didn't record it in the 9-27-16 test
     for index in range(1, len(x_chunk)):
         if x_chunk[index-1] == 0 and x_chunk[index] == 1:
             # success
+            print ("found enable index: %d" % index)
             return index
     # fail
     return -1
@@ -278,116 +248,99 @@ def normalize(x):
 #     return [roll, pitch, yaw]
 
 def get_motion_values(sample_dict_list, sensor_num):
+    """Extract quaternion data for 1 sensor, converting hex strings to ints.
+    Return 4xN array."""
+    # get hex string data for sensor
     x_motion = [d['data'][sensor_num] for d in sample_dict_list]
+    # convert hex string to int
     x_motion = [[int(hex_val, 16) for hex_val in sample] for sample in x_motion]
-    x_motion = np.array(x_motion)
-    x_motion = np.transpose(x_motion)
+    # convert to numpy array, reshape so quaternion arrays are in first dimension
+    x_motion = np.transpose(np.array(x_motion))
     return x_motion
 
-def load_motion(folder, filename, Fs_openephys, Fs_motion):
+# a = np.array(['a', 'b', 'c', 'd'])
+# b = np.array([1,2])
+# print (a[b])
+
+def make_motion_timestamps(x_chunk, t_chunk, enable_index, samples_per_chunk):
+    """The motion sample rate is irregular! Return irregular timestamps.
+    Assume samples are evenly spaced within each chunk."""
+    # find the start of each chunk
+    chunk_start_indices = []
+    for i in range(enable_index, len(t_chunk)):
+        # TODO off-by-1?
+        if x_chunk[i] != x_chunk[i-1]:
+            chunk_start_indices.append(i)
+
+    # make evenly spaced sample timestamps within each chunk
+    sample_indices = []
+    for c in range(len(chunk_start_indices)-1):
+        start = chunk_start_indices[c]
+        end = chunk_start_indices[c+1]
+        interval = (end - start)*1.0/samples_per_chunk
+        sample_indices.append(np.arange(start, end, interval))
+
+    # convert from indices to seconds
+    sample_indices = np.array(sample_indices, dtype=np.int32).flatten()
+    t_motion = t_chunk[sample_indices]
+
+   # if len(t_motion) != x_motion.shape[1]:
+   #     raise RuntimeError('make_motion_timestamps: something is very wrong')
+
+    # fig = plt.figure()
+    # # ax1 = fig.gca()
+    # ax1 = fig.add_subplot(3,1,1)
+    # ax2 = fig.add_subplot(3,1,2)
+    # ax3 = fig.add_subplot(3,1,3)
+
+    # plot_time(ax1, x_chunk, t_chunk, xlabel='', ylabel='chunk nums')
+    # plot_time(ax1, np.ones(len(t_motion)), t_motion, xlabel='', ylabel='chunk nums')
+    # plot_time(ax1, np.ones(len(chunk_start_indices)), t_chunk[chunk_start_indices], xlabel='', ylabel='chunk nums', marker='o')
+    # plot_time(ax1, np.ones(len(sample_indices)), t_chunk[sample_indices], xlabel='', ylabel='chunk nums', marker='o')
+    # plot_quaternion(ax2, x_motion_new, t_motion, xlabel='', ylabel='quat')
+    # plot_quaternion(ax3, x_motion, range(x_motion.shape[1]), xlabel='', ylabel='quat')
+
+    # plt.show()
+    # exit(3)
+
+    # a = np.array([[0,1,2], [3,4,5]])
+    # print (a[:, 1:])
+    return t_motion
+
+def load_motion(folder, filename):
+    """Return 3 4xN arrays, with quaternion data for each sensor."""
     sample_dict_list = []
     with open(folder + filename, 'r') as f:
         for line in f:
             sample_dict_list.append(json.loads(line))
 
-    x_motion_chunk_nums = [d['chunk'] for d in sample_dict_list]
-    x_motion_sample_nums = [d['sample'] for d in sample_dict_list]
+    if len(sample_dict_list[0]['data']) != 3:
+        raise RuntimeError("load_motion: expected 3 motion sensors")
+
+    # # unused:
+    # x_motion_chunk_nums = [d['chunk'] for d in sample_dict_list]
+    # x_motion_sample_nums = [d['sample'] for d in sample_dict_list]
+
+    # find samples per chunk, by checking the sample num before a zero
+    for i in range(1, len(sample_dict_list)):
+        if int(sample_dict_list[i]['sample']) == 0:
+            samples_per_chunk = 1+int(sample_dict_list[i-1]['sample'])
+            break
+
 
     x_motion0 = get_motion_values(sample_dict_list, 0)
     x_motion1 = get_motion_values(sample_dict_list, 1)
     x_motion2 = get_motion_values(sample_dict_list, 2)
-    t_motion = np.array(np.arange(x_motion0.shape[1])) / Fs_motion
 
-    # TODO WARNING the openephys and motion times are off by a factor of 2,
-    # and this is a super shitty hack to make them line up, probably,
-    # with out fixing or understanding the underlying problem!!!!!!!!
+    return (x_motion0, x_motion1, x_motion2, samples_per_chunk)
 
-    # t_motion = t_motion * 2
-    # new_num_samples = len(t_motion)* 1.0 * Fs_openephys / Fs_motion
-    # (x_motion0, t_motion) = sig.resample(x_motion0, new_num_samples, t=t_motion, axis=0, window='hanning')
-
-    print(x_motion0.shape)
-    print(t_motion.shape)
-
-    return (x_motion0, x_motion1, x_motion2, t_motion)
-
-def make_bad_plots():
-    folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
-    Fs_openephys = 30000
-    Fs_motion = 100 # motion sample rate in Hz
-
-    (x_audio, t_audio) =   load_openephys(folder, "100_ADC5_2.continuous", Fs_openephys)
-    (x_chunk_pin1, t_chunk_pin1) = load_openephys(folder, "100_ADC6_2.continuous", Fs_openephys)
-    (x_chunk_pin2, t_chunk_pin2) = load_openephys(folder, "100_ADC7_2.continuous", Fs_openephys)
-    (x_chunk, t_chunk) = get_chunk_nums(x_chunk_pin1, t_chunk_pin1, x_chunk_pin2, t_chunk_pin2)
-    (x_chan4, t_chan4) = load_openephys(folder, "100_CH4_2.continuous", Fs_openephys)
-
-    (x_motion0, x_motion1, x_motion2, t_motion) = load_motion(folder, "motion9-27-16_2.txt", Fs_openephys, Fs_motion)
-
-    # x_motion0 = normalize(x_motion0)
-    # x_motion1 = normalize(x_motion1)
-    # x_motion2 = normalize(x_motion2)
-    # x_chan4 = normalize(x_chan4)
-    # x_audio = normalize(x_audio)
-
-    motion_enable_index = find_enable_index(x_chunk, t_chunk)
-    # offset the motion times so it matches the start of the openephys recording
-    t_motion = t_motion + t_audio[motion_enable_index]
-
-    # truncate the openephys data so it starts when the motion recording was enabled
-    # # index_range = [motion_enable_index + Fs_openephys*2, motion_enable_index + Fs_openephys*5]
-    # index_range = [motion_enable_index, motion_enable_index + Fs_openephys*20]
-    index_range = [motion_enable_index, -1]
-    motion_index_range = [math.floor(i*1.0 / Fs_openephys * Fs_motion) for i in index_range]
-
-
-    x_chunk = x_chunk[index_range[0] : index_range[1]]
-    t_chunk = t_chunk[index_range[0] : index_range[1]]
-    x_chan4 = x_chan4[index_range[0] : index_range[1]]
-    t_chan4 = t_chan4[index_range[0] : index_range[1]]
-    x_audio = x_audio[index_range[0] : index_range[1]]
-    t_audio = t_audio[index_range[0] : index_range[1]]
-
-
-    # t_motion = t_motion[index_range[0] : index_range[1]]
-    # t_motion = t_motion[motion_index_range[0] : motion_index_range[1]]
-    # x_motion0 = x_motion0[motion_index_range[0] : motion_index_range[1], :]
-    # x_motion1 = x_motion1[motion_index_range[0] : motion_index_range[1], :]
-    # x_motion2 = x_motion2[motion_index_range[0] : motion_index_range[1], :]
-    print(x_motion0.shape)
-    print(t_motion.shape)
-
-    fig = plt.figure()
-    ax1 = fig.add_subplot(5,1,1)
-    ax2 = fig.add_subplot(5,1,2)
-    ax3 = fig.add_subplot(5,1,3)
-    ax4 = fig.add_subplot(5,1,4)
-    ax5 = fig.add_subplot(5,1,5)
-    t_range = [48, 58]
-    # t_range = [48, 300]
-    x_audio_low = lowpass(x_audio, 5000, Fs_openephys)
-    plot_time(ax1, x_chan4, t_chan4, xlim=t_range, xlabel='', ylabel='EEG Amplitude')
-    plot_time(ax2, x_audio_low, t_audio, ylim=[0.01, 0.07], xlim=t_range, xlabel='', ylabel='Audio Volume')
-    plot_quaternion(ax3, x_motion0, t_motion, xlim=t_range, xlabel='', ylabel='Hand Orientation ')
-    plot_quaternion(ax4, x_motion1, t_motion, xlim=t_range, xlabel='', ylabel='Forearm Orientation  ')
-    plot_quaternion(ax5, x_motion2, t_motion, xlim=t_range, ylabel='Upper Arm Orientation ')
-
-    # fig2 = plt.figure()
-    # # calc_and_plot_spectrogram(fig2.gca(), x_audio, t_audio, Fs_openephys)
-    # calc_and_plot_spectrogram(fig2.gca(), x_audio, t_audio, Fs_openephys)
-
-    # ax.plot(xlow)
-    plt.show()
-
-    # plt.savefig("figs/crappy_synch_plot.png", bbox_inches='tight')
-
-    # save_wav(xlow, "audio_test.wav")
 
 
 def test_timing():
-    # ax1 = fig.add_subplot(5,1,1)
     fig = plt.figure()
-    ax1 = fig.gca()
+    # ax1 = fig.gca()
+    ax1 = fig.add_subplot(2,1,1)
+    ax2 = fig.add_subplot(2,1,2)
 
 
     folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
@@ -396,18 +349,35 @@ def test_timing():
     Fs_motion = 100 # motion sample rate in Hz
 
     (x_chunk_pin1, t_chunk_pin1) = load_openephys(folder, "100_ADC6_2.continuous", Fs_openephys)
+    (x_chunk_pin2, t_chunk_pin2) = load_openephys(folder, "100_ADC7_2.continuous", Fs_openephys)
 
     # plt.hist(tdiffs, bins=1000)
     # plot_time(ax1, tdiffs, range(len(tdiffs)), xlabel='', ylabel='chunk 1')
     # plot_time(ax1, t_chunk_pin1, range(len(t_chunk_pin1)), xlabel='', ylabel='chunk 1')
 
-    (x_chunk_pin2, t_chunk_pin2) = load_openephys(folder, "100_ADC7_2.continuous", Fs_openephys)
     (x_chunk, t_chunk) = get_chunk_nums(x_chunk_pin1, t_chunk_pin1, x_chunk_pin2, t_chunk_pin2)
-    # plot_time(ax1, x_chunk_pin1, t_chunk_pin1, xlabel='', ylabel='chunk nums')
-    plot_time(ax1, x_chunk, t_chunk, xlabel='', ylabel='chunk nums')
-    plt.show()
 
+    enable_index = find_enable_index(x_chunk)
+
+    # plot_time(ax1, x_chunk_pin1, t_chunk_pin1, xlabel='', ylabel='chunk nums')
+
+    # plot_time(ax1, x_chunk, t_chunk, xlabel='', ylabel='chunk nums')
+    # plot_time(ax1, x_chunk, range(len(x_chunk)), xlabel='', ylabel='chunk nums')
+
+    # t_fake = np.arange(t_chunk[0], t_chunk[-1], 1/Fs_motion*10*4)
+    # t_fake = np.array(chunk_start_indices)
+    # plot_time(ax1, 1.1*np.ones(t_chunk_starts.shape), t_chunk_starts, xlabel='', ylabel='chunk nums', linestyle='None', marker='o')
+    # plot_time(ax1, np.ones(t_fake.shape), t_fake, xlabel='', ylabel='chunk nums', linestyle='None', marker='o')
+
+    (x_motion0, x_motion1, x_motion2, samples_per_chunk) = load_motion(folder, "motion9-27-16_2.txt")
+    t_motion = make_motion_timestamps(x_chunk, t_chunk, enable_index, samples_per_chunk)
+    plot_quaternion(ax1, x_motion0, t_motion, xlabel='', ylabel='Hand Orientation ')
+    plot_quaternion(ax2, x_motion0, range(x_motion0.shape[1]), xlabel='', ylabel='Hand Orientation ')
+
+    plt.show()
     exit(3)
+
+
     plot_time(ax1, x_chunk_pin1, t_chunk_pin1, xlabel='', ylabel='chunk 1')
     plot_time(ax1, x_chunk_pin2, t_chunk_pin2, xlabel='', ylabel='chunk 2')
 
@@ -422,9 +392,83 @@ def test_timing():
     # print(t_motion.shape)
 
 
-
-
 test_timing()
 
 # def main():
 # main()
+
+
+# def make_bad_plots():
+#     folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
+#     Fs_openephys = 30000
+#     Fs_motion = 100 # motion sample rate in Hz
+
+#     (x_audio, t_audio) =   load_openephys(folder, "100_ADC5_2.continuous", Fs_openephys)
+#     (x_chunk_pin1, t_chunk_pin1) = load_openephys(folder, "100_ADC6_2.continuous", Fs_openephys)
+#     (x_chunk_pin2, t_chunk_pin2) = load_openephys(folder, "100_ADC7_2.continuous", Fs_openephys)
+#     (x_chunk, t_chunk) = get_chunk_nums(x_chunk_pin1, t_chunk_pin1, x_chunk_pin2, t_chunk_pin2)
+#     (x_chan4, t_chan4) = load_openephys(folder, "100_CH4_2.continuous", Fs_openephys)
+
+#     (x_motion0, x_motion1, x_motion2, samples_per_chunk) = load_motion(folder, "motion9-27-16_2.txt", Fs_openephys, Fs_motion)
+
+#     enable_index = find_enable_index(x_chunk)
+#     t_motion = make_motion_timestamps(x_chunk, t_chunk, enable_index, 10)
+
+#     # x_motion0 = normalize(x_motion0)
+#     # x_motion1 = normalize(x_motion1)
+#     # x_motion2 = normalize(x_motion2)
+#     # x_chan4 = normalize(x_chan4)
+#     # x_audio = normalize(x_audio)
+
+#     motion_enable_index = find_enable_index(x_chunk)
+#     # offset the motion times so it matches the start of the openephys recording
+#     t_motion = t_motion + t_audio[motion_enable_index]
+
+#     # truncate the openephys data so it starts when the motion recording was enabled
+#     # # index_range = [motion_enable_index + Fs_openephys*2, motion_enable_index + Fs_openephys*5]
+#     # index_range = [motion_enable_index, motion_enable_index + Fs_openephys*20]
+#     index_range = [motion_enable_index, -1]
+#     motion_index_range = [math.floor(i*1.0 / Fs_openephys * Fs_motion) for i in index_range]
+
+
+#     x_chunk = x_chunk[index_range[0] : index_range[1]]
+#     t_chunk = t_chunk[index_range[0] : index_range[1]]
+#     x_chan4 = x_chan4[index_range[0] : index_range[1]]
+#     t_chan4 = t_chan4[index_range[0] : index_range[1]]
+#     x_audio = x_audio[index_range[0] : index_range[1]]
+#     t_audio = t_audio[index_range[0] : index_range[1]]
+
+
+#     # t_motion = t_motion[index_range[0] : index_range[1]]
+#     # t_motion = t_motion[motion_index_range[0] : motion_index_range[1]]
+#     # x_motion0 = x_motion0[motion_index_range[0] : motion_index_range[1], :]
+#     # x_motion1 = x_motion1[motion_index_range[0] : motion_index_range[1], :]
+#     # x_motion2 = x_motion2[motion_index_range[0] : motion_index_range[1], :]
+#     print(x_motion0.shape)
+#     print(t_motion.shape)
+
+#     fig = plt.figure()
+#     ax1 = fig.add_subplot(5,1,1)
+#     ax2 = fig.add_subplot(5,1,2)
+#     ax3 = fig.add_subplot(5,1,3)
+#     ax4 = fig.add_subplot(5,1,4)
+#     ax5 = fig.add_subplot(5,1,5)
+#     t_range = [48, 58]
+#     # t_range = [48, 300]
+#     x_audio_low = lowpass(x_audio, 5000, Fs_openephys)
+#     plot_time(ax1, x_chan4, t_chan4, xlim=t_range, xlabel='', ylabel='EEG Amplitude')
+#     plot_time(ax2, x_audio_low, t_audio, ylim=[0.01, 0.07], xlim=t_range, xlabel='', ylabel='Audio Volume')
+#     plot_quaternion(ax3, x_motion0, t_motion, xlim=t_range, xlabel='', ylabel='Hand Orientation ')
+#     plot_quaternion(ax4, x_motion1, t_motion, xlim=t_range, xlabel='', ylabel='Forearm Orientation  ')
+#     plot_quaternion(ax5, x_motion2, t_motion, xlim=t_range, ylabel='Upper Arm Orientation ')
+
+#     # fig2 = plt.figure()
+#     # # calc_and_plot_spectrogram(fig2.gca(), x_audio, t_audio, Fs_openephys)
+#     # calc_and_plot_spectrogram(fig2.gca(), x_audio, t_audio, Fs_openephys)
+
+#     # ax.plot(xlow)
+#     plt.show()
+
+#     # plt.savefig("figs/crappy_synch_plot.png", bbox_inches='tight')
+
+#     # save_wav(xlow, "audio_test.wav")
