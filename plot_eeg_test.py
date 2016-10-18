@@ -37,24 +37,37 @@ def calc_spectrogram(data, Fs, freq_range=None, log=True, log_ref=1):
         noverlap=int(resolution/2),
         mode='psd',
         scaling= 'density')
-
+    # print(time_bins)
+    # exit(3)
     Pxx = Pxx.transpose()
     if log:
         Pxx = 10*np.log10(Pxx/log_ref)
     Pxx, freq_bins = truncate_to_range(Pxx, freq_bins, freq_range)
     return (freq_bins, time_bins, Pxx)
 
-def plot_spectrogram(axes, Pxx, t, freq_bins,title='',
+def plot_spectrogram(axes, Pxx, time_bins, freq_bins,title='',
                      xlabel='Time (s)',ylabel='Frequency (Hz)',zlabel='PSD (dB)'):
+    # TODO WHY ISN'T IT FILLING UP THE TIME AXIS??!!
+    print(Pxx.shape)
+    print(Pxx.transpose().shape)
+    # print(time_bins.shape)
+    # print(freq_bins.shape)
+    # axes.plot(time_bins, Pxx[:, 128])
+    # plt.show()
+    # exit(3)
+    im = axes.imshow(
+        Pxx.transpose(),
+        origin="lower",
+        aspect="auto",
+        extent=[time_bins[0],time_bins[-1],freq_bins[0],freq_bins[-1]],
+        cmap=plt.cm.gist_heat,
+        interpolation="none")
 
-    im = axes.imshow(Pxx.transpose(), origin="lower", aspect="auto",
-                     extent=[t[0],t[-1],freq_bins[0],freq_bins[-1]],
-                     cmap=plt.cm.gist_heat, interpolation="none")
-                     # cmap=plt.cm.gist_heat, interpolation="hanning")
+    # cmap=plt.cm.gist_heat, interpolation="hanning")
     axes.set_xlabel(xlabel)
     axes.set_ylabel(ylabel)
     axes.set_title(title)
-    plt.colorbar(im, ax=axes, orientation='horizontal').set_label(zlabel)
+    # plt.colorbar(im, ax=axes, orientation='horizontal').set_label(zlabel)
 
 def calc_and_plot_spectrogram(axes, data, t, Fs, freq_range=None, title='',
                               xlabel='Time (s)',ylabel='Frequency (Hz)',
@@ -334,65 +347,139 @@ def load_motion(folder, filename):
 
     return (x_motion0, x_motion1, x_motion2, samples_per_chunk)
 
+def plot_all_eeg():
+    fig = plt.figure()
+    ax1 = fig.gca()
+    folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
+    Fs_openephys = 30000
 
+    for chan_num in range(1,33):
+        (x_eeg, t_eeg) = load_openephys(folder, ("100_CH%d_2.continuous" % chan_num), Fs_openephys)
+        start = 0
+        end = len(t_eeg)/3
+        x_eeg = x_eeg[start:end]
+        t_eeg = t_eeg[start:end]
+        plot_time(ax1, x_eeg, t_eeg, ylim=[-7000, 7000], xlabel='time (s)', ylabel='EEG Amplitude')
+        # plt.show()
+        ax1.set_title(('first third of channel %d' % chan_num))
+        fig.savefig('fig_check_eeg/time_subset_chan_%d.png' % chan_num)
+        # exit(3)
+        ax1.cla()
+
+def unwrap_quat(quat):
+    """ Remove discontinuities from quaternion data, by letting values go above and below the range."""
+    # I don't know how quaternions are supposed to work, is this valid?
+    range_size = 2**16
+    max_jump_size = range_size/2.0
+    new_quat = quat.copy()
+    for d in range(new_quat.shape[0]): # for w,x,y,z
+        for i in range(1, new_quat.shape[1]): # for each sample
+            jump = (new_quat[d][i] - new_quat[d][i-1])
+            if jump > max_jump_size:
+                # huge jump up, shift back down
+                new_quat[d][i] -= range_size
+            elif jump < -max_jump_size:
+                # huge jump down, shift back up
+                new_quat[d][i] += range_size
+    return new_quat
+
+def calc_mean_onset(x_eeg, t_eeg, mvmt_onsets, seconds_before, seconds_after, Fs_eeg):
+    num_samples_before = seconds_before * Fs_eeg
+    num_samples_after  = seconds_after  * Fs_eeg
+    x_onsets = []
+    for onset in mvmt_onsets:
+        onset_index = np.searchsorted(t_eeg, onset)
+        x_onsets.append(x_eeg[onset_index-num_samples_before : onset_index+num_samples_after])
+
+    x_onsets = np.array(x_onsets)
+    print(x_onsets.shape)
+    x_mean_onset = np.mean(x_onsets, 0)
+    t_mean_onset = (np.arange(len(x_mean_onset)) - num_samples_before) / Fs_eeg # off by one?
+    return (x_mean_onset, t_mean_onset)
 
 def test_timing():
-    fig = plt.figure()
-    # ax1 = fig.gca()
-    ax1 = fig.add_subplot(2,1,1)
-    ax2 = fig.add_subplot(2,1,2)
+    # fig = plt.figure()
+    #    # ax3 = fig.gca()
+    # ax1 = fig.add_subplot(5,1,1)
+    # ax2 = fig.add_subplot(5,1,2)
+    # ax3 = fig.add_subplot(5,1,3)
+    # ax4 = fig.add_subplot(5,1,4)
+    # ax5 = fig.add_subplot(5,1,5)
 
+    fig2 = plt.figure()
+    ax = fig2.gca()
+
+    filename_chunk_pin1 =  "100_ADC6_2.continuous"
+    filename_chunk_pin2 =  "100_ADC7_2.continuous"
+    filename_eeg =         "100_CH4_2.continuous"
+    filename_motion =      "motion9-27-16_2.txt"
+
+    # filename_chunk_pin1 =  "100_ADC6.continuous"
+    # filename_chunk_pin2 =  "100_ADC7.continuous"
+    # filename_eeg =         "100_CH4.continuous"
+    # filename_motion =      "motion9-27-16.txt"
 
     folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
-
     Fs_openephys = 30000
-    Fs_motion = 100 # motion sample rate in Hz
 
-    (x_chunk_pin1, t_chunk_pin1) = load_openephys(folder, "100_ADC6_2.continuous", Fs_openephys)
-    (x_chunk_pin2, t_chunk_pin2) = load_openephys(folder, "100_ADC7_2.continuous", Fs_openephys)
+    (x_chan4, t_chan4) = load_openephys(folder, filename_eeg, Fs_openephys)
+
+    # plot_time(ax1, x_chan4, t_chan4, xlabel='', ylabel='EEG Amplitude')
+
+    # # spectrogram x-axis scaling is broken!!
+    # calc_and_plot_spectrogram(ax2, x_chan4, t_chan4, Fs_openephys)
+
+    (x_chunk_pin1, t_chunk_pin1) = load_openephys(folder, filename_chunk_pin1, Fs_openephys)
+    (x_chunk_pin2, t_chunk_pin2) = load_openephys(folder, filename_chunk_pin2, Fs_openephys)
+
+    (x_chunk, t_chunk) = get_chunk_nums(x_chunk_pin1, t_chunk_pin1, x_chunk_pin2, t_chunk_pin2)
+    enable_index = find_enable_index(x_chunk)
+
+    (x_motion0, x_motion1, x_motion2, samples_per_chunk) = load_motion(folder, filename_motion)
+    t_motion = make_motion_timestamps(x_chunk, t_chunk, enable_index, samples_per_chunk)
+
+    x_motion0 = unwrap_quat(x_motion0)
+    x_motion1 = unwrap_quat(x_motion1)
+    x_motion2 = unwrap_quat(x_motion2)
+
+    # xlim_range = [t_chan4[0], t_chan4[-1]]
+    xlim_range = None
+    # plot_quaternion(ax3, x_motion0, t_motion, xlim=xlim_range, xlabel='', ylabel='Hand Orientation ')
+    # plot_quaternion(ax4, x_motion1, t_motion, xlim=xlim_range, xlabel='', ylabel='Forearm Orientation  ')
+    # plot_quaternion(ax5, x_motion2, t_motion, xlim=xlim_range, ylabel='Upper Arm Orientation ')
+
+    # plot_quaternion(ax, x_motion0, t_motion, xlim=xlim_range, xlabel='', ylabel='Hand Orientation ')
+    # plot_quaternion(ax, x_motion1, t_motion, xlim=xlim_range, xlabel='', ylabel='Forearm Orientation  ')
+    # plot_quaternion(ax, x_motion2, t_motion, xlim=xlim_range, ylabel='Upper Arm Orientation ')
+
+    # first mvmt1 is weird?
+    # marked where upper blue and purple diverge
+    mvmt1_onsets = [31.85, 43.00, 53.65, 63.75, 73.95, 84.5, 95.4, 105.25, 115.05, 124.45, 134.72 ]
+    # marked at downwards turning point of upper light blue
+    mvmt2_onsets = [35.54, 46.52, 57.18, 66.97, 77.32, 87.95, 98.27, 108.62, 118.25, 127.95, 137.95 ]
+    baseline = [21.0, 29.0]
+    # for onset in mvmt1_onsets:
+    #     ax.plot([onset, onset+1.0/Fs_openephys], [80000, -20000], color='k', linestyle='--')
+    # for onset in mvmt2_onsets:
+    #     ax.plot([onset, onset+1.0/Fs_openephys], [80000, -20000], color='b', linestyle='--')
+    # plt.show()
+
+    all_mvmt_onsets = np.concatenate((mvmt1_onsets, mvmt2_onsets))
+    x_eeg = x_chan4
+    t_eeg = t_chan4
+
+    (x_mean_onset, t_mean_onset) = calc_mean_onset(x_eeg, t_eeg, all_mvmt_onsets, 1,  1, Fs_openephys)
+    plot_time(ax, x_mean_onset, t_mean_onset, xlabel='', ylabel='eeg magnitude')
+    plt.show()
+    exit(3)
 
     # plt.hist(tdiffs, bins=1000)
     # plot_time(ax1, tdiffs, range(len(tdiffs)), xlabel='', ylabel='chunk 1')
     # plot_time(ax1, t_chunk_pin1, range(len(t_chunk_pin1)), xlabel='', ylabel='chunk 1')
 
-    (x_chunk, t_chunk) = get_chunk_nums(x_chunk_pin1, t_chunk_pin1, x_chunk_pin2, t_chunk_pin2)
-
-    enable_index = find_enable_index(x_chunk)
-
-    # plot_time(ax1, x_chunk_pin1, t_chunk_pin1, xlabel='', ylabel='chunk nums')
-
-    # plot_time(ax1, x_chunk, t_chunk, xlabel='', ylabel='chunk nums')
-    # plot_time(ax1, x_chunk, range(len(x_chunk)), xlabel='', ylabel='chunk nums')
-
-    # t_fake = np.arange(t_chunk[0], t_chunk[-1], 1/Fs_motion*10*4)
-    # t_fake = np.array(chunk_start_indices)
-    # plot_time(ax1, 1.1*np.ones(t_chunk_starts.shape), t_chunk_starts, xlabel='', ylabel='chunk nums', linestyle='None', marker='o')
-    # plot_time(ax1, np.ones(t_fake.shape), t_fake, xlabel='', ylabel='chunk nums', linestyle='None', marker='o')
-
-    (x_motion0, x_motion1, x_motion2, samples_per_chunk) = load_motion(folder, "motion9-27-16_2.txt")
-    t_motion = make_motion_timestamps(x_chunk, t_chunk, enable_index, samples_per_chunk)
-    plot_quaternion(ax1, x_motion0, t_motion, xlabel='', ylabel='Hand Orientation ')
-    plot_quaternion(ax2, x_motion0, range(x_motion0.shape[1]), xlabel='', ylabel='Hand Orientation ')
-
-    plt.show()
-    exit(3)
-
-
-    plot_time(ax1, x_chunk_pin1, t_chunk_pin1, xlabel='', ylabel='chunk 1')
-    plot_time(ax1, x_chunk_pin2, t_chunk_pin2, xlabel='', ylabel='chunk 2')
-
-    # plot_quaternion(ax3, x_motion0, t_motion, xlim=t_range, xlabel='', ylabel='Hand Orientation ')
-    # plot_quaternion(ax4, x_motion1, t_motion, xlim=t_range, xlabel='', ylabel='Forearm Orientation  ')
-    # plot_quaternion(ax5, x_motion2, t_motion, xlim=t_range, ylabel='Upper Arm Orientation ')
-    plt.show()
-
-    # (x_motion0, x_motion1, x_motion2, t_motion) = load_motion(folder, "motion9-27-16_2.txt", Fs_openephys, Fs_motion)
-
-    # print(x_motion0.shape)
-    # print(t_motion.shape)
-
 
 test_timing()
+# plot_all_eeg()
 
 # def main():
 # main()
