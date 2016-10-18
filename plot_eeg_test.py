@@ -5,6 +5,7 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.signal as sig
+import scipy.stats as stats
 
 from MyUtilities import *
 from MotionLoading import *
@@ -105,31 +106,50 @@ def show_mvmt_onset_lines_over_quats(mvmt_onsets, x_motion0, x_motion1, x_motion
     plot_quaternion(ax, x_motion2, t_motion,  ylabel='Upper Arm Orientation ')
     plt.show()
 
-def calc_mean_onset(x_eeg, t_eeg, mvmt_onsets, seconds_before, seconds_after, Fs_eeg):
-    num_samples_before = seconds_before * Fs_eeg
-    num_samples_after  = seconds_after  * Fs_eeg
+def calc_mean_onset_LMP(x_eeg, t_eeg, mvmt_onsets, time_interval, Fs_eeg):
+    """Return 1 eeg channel averaged over all mvmt_onset times.
+    time_interval is [seconds_before_onset, seconds_after_onset]"""
+    num_samples_before = time_interval[0] * Fs_eeg
+    num_samples_after  = time_interval[1] * Fs_eeg
     x_onsets = []
     for onset in mvmt_onsets:
         onset_index = np.searchsorted(t_eeg, onset)
         x_onsets.append(x_eeg[onset_index-num_samples_before : onset_index+num_samples_after])
 
     x_onsets = np.array(x_onsets)
-    print(x_onsets.shape)
-    x_mean_onset = np.mean(x_onsets, 0)
+    x_mean_onset = np.mean(x_onsets, axis=0)
+    # x_sem_onset = stats.sem(x_onsets, axis=0)
+    x_std_onset = np.std(x_onsets, axis=0)
     t_mean_onset = (np.arange(len(x_mean_onset)) - num_samples_before) / Fs_eeg # off by one?
-    return (x_mean_onset, t_mean_onset)
+    return (x_mean_onset, x_std_onset, t_mean_onset, x_onsets)
 
-def plot_mean_onsets_all_channels(all_mvmt_onsets, x_eeg_all, t_eeg, all_eeg_channels, Fs_eeg):
+def plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_interval, all_eeg_channels, Fs_eeg):
+    fig = plt.figure()
+    ax = fig.gca()
     for chan_name in all_eeg_channels:
-        # (x_eeg, t_eeg) = load_openephys_file(folder, ("100_CH%d_2.continuous" % chan_name), Fs_eeg)
-        x_eeg = x_eeg_all[chan_name-1, :]
-        (x_mean_onset, t_mean_onset) = calc_mean_onset(x_eeg, t_eeg, all_mvmt_onsets, 1,  1, Fs_eeg)
+        chan_index = chan_name-1
+        x_eeg = x_eeg_all[chan_index, :]
+        # get mean and standard error
+        (x_mean_onset, x_std_onset, t_mean_onset, x_onsets) = calc_mean_onset_LMP(x_eeg, t_eeg, all_mvmt_onsets, time_interval, Fs_eeg)
+
+        #### plot all
+        # for onset in range(len(all_mvmt_onsets)):
+        #     plot_time(ax, x_onsets[onset], t_mean_onset)
+
+        ##### plot mean
         plot_time(ax, x_mean_onset, t_mean_onset,
+                  linewidth='2',
                   xlabel='time (s)', ylabel='eeg magnitude',
                   title=('Mean EEG around movement onsets, channel %d' % chan_name))
-        # fig2.savefig('fig_onset_all_chans/onsets_chan_%02d.png' % chan_name)
-        # ax.cla()
-        plt.show()
+
+        # plot standard error
+        ax.fill_between(t_mean_onset,
+                        x_mean_onset - x_std_onset,
+                        x_mean_onset + x_std_onset,
+                        color='grey')
+
+        fig.savefig('fig_onset_all_chans_downsample/onsets_chan_%02d.png' % chan_name)
+        ax.cla()
 
 
 def main():
@@ -149,37 +169,40 @@ def main():
     (x_eeg_all, t_eeg) = load_all_eeg(folder, Fs_openephys, all_eeg_channels)
     (x_eeg_all, t_eeg, Fs_eeg) = preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, Fs_openephys)
 
-    ##### plot all eeg, time and spectrogram
-    fig = plt.figure()
-    ax = fig.gca()
-    for chan_name in all_eeg_channels:
-        plot_time(ax, x_eeg_all[chan_name-1, :], t_eeg,
-                  xlabel='time (s)', ylabel='eeg magnitude',
-                  title=('Downsampled EEG, channel %d' % chan_name))
-        fig.savefig('fig_check_eeg_downsample/eeg_chan_%02d.png' % chan_name)
+    # ##### plot all eeg, time and spectrogram
+    # fig = plt.figure()
+    # ax = fig.gca()
+    # for chan_name in all_eeg_channels:
+    #     plot_time(ax, x_eeg_all[chan_name-1, :], t_eeg,
+    #               xlabel='time (s)', ylabel='eeg magnitude',
+    #               title=('Downsampled EEG, channel %d' % chan_name))
+    #     fig.savefig('fig_check_eeg_downsample/eeg_chan_%02d.png' % chan_name)
 
-        ax.cla()
-        calc_and_plot_spectrogram(ax,
-                                  x_eeg_all[chan_name-1],
-                                  t_eeg,
-                                  Fs_eeg,
-                                  freq_range=[0, eeg_lowpass_cutoff],
-                                  title=('Downsampled EEG, channel %d' % chan_name))
-        fig.savefig('fig_check_eeg_downsample/eeg_chan_%02d_spect.png' % chan_name)
-        ax.cla()
+    #     ax.cla()
+    #     calc_and_plot_spectrogram(ax,
+    #                               x_eeg_all[chan_name-1],
+    #                               t_eeg,
+    #                               Fs_eeg,
+    #                               freq_range=[0, eeg_lowpass_cutoff],
+    #                               title=('Downsampled EEG, channel %d' % chan_name))
+    #     fig.savefig('fig_check_eeg_downsample/eeg_chan_%02d_spect.png' % chan_name)
+    #     ax.cla()
 
+
+
+
+
+    # ##### load motion data
+    # (x_motion0, x_motion1, x_motion2, t_motion) =  get_motion(folder,
+    #                                                           filename_motion,
+    #                                                           filename_chunk_pin1,
+    #                                                           filename_chunk_pin2,
+    #                                                           Fs_openephys)
+    mvmt_onsets = get_mvmt_onsets()
+    plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, mvmt_onsets, [2, 2], all_eeg_channels, Fs_eeg)
     exit(3)
 
 
     plt.show()
-
-    ##### load motion data
-    (x_motion0, x_motion1, x_motion2, t_motion) =  get_motion(folder,
-                                                              filename_motion,
-                                                              filename_chunk_pin1,
-                                                              filename_chunk_pin2,
-                                                              Fs_openephys)
-    mvmt_onsets = get_mvmt_onsets()
-
 
 main()
