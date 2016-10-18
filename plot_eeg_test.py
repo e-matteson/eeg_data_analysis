@@ -107,7 +107,7 @@ def show_mvmt_onset_lines_over_quats(mvmt_onsets, x_motion0, x_motion1, x_motion
     plt.show()
 
 def calc_mean_onset_LMP(x_eeg, t_eeg, mvmt_onsets, time_interval, Fs_eeg):
-    """Return 1 eeg channel averaged over all mvmt_onset times.
+    """Return 1 eeg channel time-domain averaged over all mvmt_onset times.
     time_interval is [seconds_before_onset, seconds_after_onset]"""
     num_samples_before = time_interval[0] * Fs_eeg
     num_samples_after  = time_interval[1] * Fs_eeg
@@ -118,10 +118,10 @@ def calc_mean_onset_LMP(x_eeg, t_eeg, mvmt_onsets, time_interval, Fs_eeg):
 
     x_onsets = np.array(x_onsets)
     x_mean_onset = np.mean(x_onsets, axis=0)
-    # x_sem_onset = stats.sem(x_onsets, axis=0)
-    x_std_onset = np.std(x_onsets, axis=0)
+    x_sem_onset = stats.sem(x_onsets, axis=0)
+    # x_std_onset = np.std(x_onsets, axis=0)
     t_mean_onset = (np.arange(len(x_mean_onset)) - num_samples_before) / Fs_eeg # off by one?
-    return (x_mean_onset, x_std_onset, t_mean_onset, x_onsets)
+    return (x_mean_onset, x_sem_onset, t_mean_onset, x_onsets)
 
 def plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_interval, all_eeg_channels, Fs_eeg):
     fig = plt.figure()
@@ -130,7 +130,7 @@ def plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_int
         chan_index = chan_name-1
         x_eeg = x_eeg_all[chan_index, :]
         # get mean and standard error
-        (x_mean_onset, x_std_onset, t_mean_onset, x_onsets) = calc_mean_onset_LMP(x_eeg, t_eeg, all_mvmt_onsets, time_interval, Fs_eeg)
+        (x_mean_onset, x_sem_onset, t_mean_onset, x_onsets) = calc_mean_onset_LMP(x_eeg, t_eeg, all_mvmt_onsets, time_interval, Fs_eeg)
 
         #### plot all
         # for onset in range(len(all_mvmt_onsets)):
@@ -140,17 +140,78 @@ def plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_int
         plot_time(ax, x_mean_onset, t_mean_onset,
                   linewidth='2',
                   xlabel='time (s)', ylabel='eeg magnitude',
-                  title=('Mean EEG around movement onsets, channel %d' % chan_name))
+                  title=('Mean EEG around movement onsets, SEM, channel %d' % chan_name))
 
         # plot standard error
         ax.fill_between(t_mean_onset,
-                        x_mean_onset - x_std_onset,
-                        x_mean_onset + x_std_onset,
+                        x_mean_onset - x_sem_onset,
+                        x_mean_onset + x_sem_onset,
                         color='grey')
 
         fig.savefig('fig_onset_all_chans_downsample/onsets_chan_%02d.png' % chan_name)
         ax.cla()
 
+def calc_mean_onset_power(x_eeg, t_eeg, mvmt_onsets, time_interval, freq_index_interval, Fs_eeg):
+    """Return 1 eeg channel freq-domain averaged over all mvmt_onset times.
+    time_interval is [seconds_before_onset, seconds_after_onset]"""
+    num_samples_before = time_interval[0] * Fs_eeg
+    num_samples_after  = time_interval[1] * Fs_eeg
+    x_onset_powers = []
+    for onset in mvmt_onsets:
+        onset_index = np.searchsorted(t_eeg, onset)
+        x_onset = x_eeg[onset_index-num_samples_before : onset_index+num_samples_after]
+        (freq_bins, time_bins, Pxx) = calc_spectrogram(x_onset, Fs_eeg,
+                                                             freq_range=[0,100],
+                                                             log=True)
+        # print(freq_bins)
+        band_power = np.sum(Pxx[:, freq_index_interval[0]:freq_index_interval[1]], axis=1)
+        x_onset_powers.append(band_power)
+
+    x_onset_powers = np.array(x_onset_powers)
+
+    x_mean_onset_power = np.mean(x_onset_powers, axis=0)
+    x_sem_onset_power = stats.sem(x_onset_powers, axis=0)
+    # x_std_onset_power = np.std(x_onset_powers, axis=0)
+    t_mean_onset_power = time_bins - sum(time_interval)/2.0
+    freq_hz_interval = [freq_bins[freq_index_interval[0]], freq_bins[freq_index_interval[1]]]
+    return (x_mean_onset_power, x_sem_onset_power, t_mean_onset_power, x_onset_powers, freq_hz_interval)
+
+
+def plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_interval, freq_index_interval, all_eeg_channels, Fs_eeg):
+    rest_power = 1 #should really calculate a baseline/rest power
+    fig = plt.figure()
+    ax = fig.gca()
+    for chan_name in all_eeg_channels:
+        chan_index = chan_name-1
+        x_eeg = x_eeg_all[chan_index, :]
+
+        # get mean and standard error / deviation
+        (x_mean_onset_power, x_sem_onset_power, t_mean_onset_power,
+         x_onset_powers, freq_hz_interval) = calc_mean_onset_power(
+             x_eeg, t_eeg, all_mvmt_onsets, time_interval, freq_index_interval, Fs_eeg)
+        #### plot all
+        # for onset in range(len(all_mvmt_onsets)):
+        #     plot_time(ax, x_onsets[onset], t_mean_onset)
+
+        ##### plot mean
+        title_str = ('EEG power in [%.1f - %.1f Hz] band \naveraged across %d movement onsets \n(channel %d)'
+                     % (freq_hz_interval[0], freq_hz_interval[1], len(all_mvmt_onsets), chan_name))
+        plot_time(ax, toDecibels(x_mean_onset_power, rest_power), t_mean_onset_power,
+                  linewidth='2',
+                  xlabel='Time (s)', ylabel='Power (dB)',
+                  title=title_str)
+
+        # plot standard error
+        ax.fill_between(t_mean_onset_power,
+                        toDecibels(x_mean_onset_power - x_sem_onset_power, rest_power),
+                        toDecibels(x_mean_onset_power + x_sem_onset_power, rest_power),
+                        color='grey')
+
+        # plt.show()
+        # exit(3)
+        fig.savefig('fig_onset_power/f%d_%d_onsets_chan_%02d.png'
+                    % (freq_index_interval[0], freq_index_interval[1], chan_name))
+        ax.cla()
 
 def main():
 
@@ -162,7 +223,7 @@ def main():
 
     eeg_downsample_factor = 30
     eeg_lowpass_cutoff = 100
-    # all_eeg_channels = range(1,5)
+    # all_eeg_channels = range(1,3)
     all_eeg_channels = range(1,33)
 
     ##### load eeg data
@@ -199,7 +260,38 @@ def main():
     #                                                           filename_chunk_pin2,
     #                                                           Fs_openephys)
     mvmt_onsets = get_mvmt_onsets()
-    plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, mvmt_onsets, [2, 2], all_eeg_channels, Fs_eeg)
+    # plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, mvmt_onsets, [2, 2], all_eeg_channels, Fs_eeg)
+
+    freq_interval_list = [[0,16],
+                          [2,16],
+                          [4,16],
+                          [6,16],
+                          [8,16],
+                          [10,16],
+                          [12,16],
+                          [14,16],
+                          [1, 14],
+                          [3, 14],
+                          [5, 14],
+                          [7, 14],
+                          [9, 14],
+                          [11, 14],
+                          [0, 10],
+                          [2, 10],
+                          [4, 10],
+                          [6, 10],
+                          [8, 10],
+                          [1, 8],
+                          [3, 8],
+                          [5, 8],
+                          [7, 8],
+
+                          ]
+
+
+    for freq_interval in freq_interval_list:
+        print(freq_interval)
+        plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, mvmt_onsets, [2, 2], freq_interval, all_eeg_channels, Fs_eeg)
     exit(3)
 
 

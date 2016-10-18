@@ -79,6 +79,13 @@ def unwrap_quat(x_motion, range_size=2**16):
                 x_motion_copy[d][i] += range_size
     return x_motion_copy
 
+def toDecibels(x, x_ref):
+    # x is 1d np array, x_ref is scalar (or same dim array?)
+    # TODO is clip() the right solution to zero division?
+    # see what options log10 offers
+    return 10*np.log10(np.true_divide(x, x_ref).clip(min=1e-8) )
+    # return np.true_divide(x, x_ref) ** 10
+
 def debounce_discrete_signal(x, min_samples_per_chunk):
     # Remove any bounces that are shorter than min_samples_per_chunk
     # Do not remove a short leading bounce at the very beginning of the array
