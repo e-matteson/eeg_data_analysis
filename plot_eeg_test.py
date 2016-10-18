@@ -38,7 +38,7 @@ def preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, 
     #                           t_eeg[:Fs_openephys*2],
     #                           Fs_openephys)
 
-    x_eeg_all = reference_all_eeg(x_eeg_all)
+    # x_eeg_all = reference_all_eeg(x_eeg_all)
     x_eeg_all = lowpass_all_eeg(x_eeg_all, eeg_lowpass_cutoff, Fs_openephys)
 
     Fs_eeg = Fs_openephys / eeg_downsample_factor
@@ -127,7 +127,8 @@ def plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_int
     fig = plt.figure()
     ax = fig.gca()
     for chan_name in all_eeg_channels:
-        chan_index = chan_name-1
+        chan_index = all_eeg_channels.index(chan_name)
+        print(chan_index)
         x_eeg = x_eeg_all[chan_index, :]
         # get mean and standard error
         (x_mean_onset, x_sem_onset, t_mean_onset, x_onsets) = calc_mean_onset_LMP(x_eeg, t_eeg, all_mvmt_onsets, time_interval, Fs_eeg)
@@ -181,8 +182,10 @@ def plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_i
     rest_power = 1 #should really calculate a baseline/rest power
     fig = plt.figure()
     ax = fig.gca()
+    print(all_eeg_channels)
     for chan_name in all_eeg_channels:
-        chan_index = chan_name-1
+        chan_index = all_eeg_channels.index(chan_name)
+        print((chan_name, chan_index))
         x_eeg = x_eeg_all[chan_index, :]
 
         # get mean and standard error / deviation
@@ -194,18 +197,31 @@ def plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_i
         #     plot_time(ax, x_onsets[onset], t_mean_onset)
 
         ##### plot mean
-        title_str = ('EEG power in [%.1f - %.1f Hz] band \naveraged across %d movement onsets \n(channel %d)'
+        title_str = ('EEG power in [%.1f - %.1f Hz] band averaged across\n %d movement onsets (channel %d)'
                      % (freq_hz_interval[0], freq_hz_interval[1], len(all_mvmt_onsets), chan_name))
         plot_time(ax, toDecibels(x_mean_onset_power, rest_power), t_mean_onset_power,
-                  linewidth='2',
-                  xlabel='Time (s)', ylabel='Power (dB)',
-                  title=title_str)
+                  linewidth='4',
+                  title=title_str,
+                  color='black')
 
+        sem_high =       toDecibels(x_mean_onset_power + x_sem_onset_power, rest_power)
+        sem_low  =       toDecibels(x_mean_onset_power - x_sem_onset_power, rest_power)
         # plot standard error
-        ax.fill_between(t_mean_onset_power,
-                        toDecibels(x_mean_onset_power - x_sem_onset_power, rest_power),
-                        toDecibels(x_mean_onset_power + x_sem_onset_power, rest_power),
-                        color='grey')
+        ax.fill_between(t_mean_onset_power, sem_low, sem_high, color='grey')
+
+        # ax.set_xlim([np.min(t_mean_onset_power), np.max(t_mean_onset_power)])
+        # ax.set_ylim([np.min(sem_low)*1.1, np.max(sem_high)*1.1])
+
+        ax.legend(["mean", "SEM"],
+                  bbox_to_anchor=(.32, .25),
+                  bbox_transform=plt.gcf().transFigure,
+                  frameon=False)
+
+        ylim = ax.get_ylim()
+        ax.plot([0,0], ylim, '--', color='black', linewidth=5)
+
+        ax.set_xlabel('Time from movement onset [s]')
+        ax.set_ylabel('Power [dB]')
 
         # plt.show()
         # exit(3)
@@ -224,7 +240,8 @@ def main():
     eeg_downsample_factor = 30
     eeg_lowpass_cutoff = 100
     # all_eeg_channels = range(1,3)
-    all_eeg_channels = range(1,33)
+    # all_eeg_channels = range(1,33)
+    all_eeg_channels = [2, 4, 6, 11, 12, 15, 24]
 
     ##### load eeg data
     (x_eeg_all, t_eeg) = load_all_eeg(folder, Fs_openephys, all_eeg_channels)
@@ -262,32 +279,12 @@ def main():
     mvmt_onsets = get_mvmt_onsets()
     # plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, mvmt_onsets, [2, 2], all_eeg_channels, Fs_eeg)
 
-    freq_interval_list = [[0,16],
-                          [2,16],
-                          [4,16],
-                          [6,16],
-                          [8,16],
-                          [10,16],
-                          [12,16],
-                          [14,16],
-                          [1, 14],
-                          [3, 14],
-                          [5, 14],
-                          [7, 14],
-                          [9, 14],
-                          [11, 14],
-                          [0, 10],
-                          [2, 10],
-                          [4, 10],
-                          [6, 10],
-                          [8, 10],
-                          [1, 8],
-                          [3, 8],
-                          [5, 8],
-                          [7, 8],
+    # freq_interval_list = [[0,16], [2,16], [4,16], [6,16], [8,16], [10,16],
+    #                       [12,16], [14,16], [1, 14], [3, 14], [5, 14], [7, 14],
+    #                       [9, 14], [11, 14], [0, 10], [2, 10], [4, 10], [6, 10],
+    #                       [8, 10], [1, 8], [3, 8], [5, 8], [7, 8]]
 
-                          ]
-
+    freq_interval_list = [[3,8]]
 
     for freq_interval in freq_interval_list:
         print(freq_interval)
