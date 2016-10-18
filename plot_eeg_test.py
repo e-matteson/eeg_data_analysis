@@ -347,24 +347,52 @@ def load_motion(folder, filename):
 
     return (x_motion0, x_motion1, x_motion2, samples_per_chunk)
 
-def plot_all_eeg():
-    fig = plt.figure()
-    ax1 = fig.gca()
-    folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
-    Fs_openephys = 30000
-
-    for chan_num in range(1,33):
+def load_all_eeg(folder, Fs_openephys, all_channels):
+    x_eeg_all = []
+    last_t_eeg = None
+    t_eeg = None
+    for chan_num in all_channels:
         (x_eeg, t_eeg) = load_openephys(folder, ("100_CH%d_2.continuous" % chan_num), Fs_openephys)
-        start = 0
-        end = len(t_eeg)/3
-        x_eeg = x_eeg[start:end]
-        t_eeg = t_eeg[start:end]
-        plot_time(ax1, x_eeg, t_eeg, ylim=[-7000, 7000], xlabel='time (s)', ylabel='EEG Amplitude')
-        # plt.show()
-        ax1.set_title(('first third of channel %d' % chan_num))
-        fig.savefig('fig_check_eeg/time_subset_chan_%d.png' % chan_num)
-        # exit(3)
-        ax1.cla()
+        x_eeg_all.append(x_eeg)
+        if (last_t_eeg is not None) and not np.isclose(t_eeg, last_t_eeg).all():
+            raise RuntimeError("load_and_preprocess_all_eeg: EEG file timestamps don't match")
+        last_t_eeg = t_eeg
+
+    x_eeg_all = np.array(x_eeg_all)
+    return (x_eeg_all, t_eeg)
+
+def reference_all_eeg(x_eeg_all):
+    # common average reference
+    x_eeg_all_copy = x_eeg_all.copy()
+    common_avg = np.mean(x_eeg_all_copy, 0)
+    x_eeg_all_copy = x_eeg_all_copy - common_avg
+
+    # print(x_eeg_all_copy.shape)
+    # print (common_avg.shape)
+    return x_eeg_all_copy
+
+
+# def plot_all_eeg():
+#     fig = plt.figure()
+#     ax1 = fig.gca()
+#     folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
+#     Fs_openephys = 30000
+#     x_eeg_all = []
+#     for chan_num in range(1,33):
+#         (x_eeg, t_eeg) = load_openephys(folder, ("100_CH%d_2.continuous" % chan_num), Fs_openephys)
+
+#         start = 0
+#         end = len(t_eeg)/3
+#         x_eeg = x_eeg[start:end]
+#         t_eeg = t_eeg[start:end]
+#         # plot_time(ax1, x_eeg, t_eeg, ylim=[-7000, 7000], xlabel='time (s)', ylabel='EEG Amplitude')
+
+#         calc_and_plot_spectrogram(ax1, x_eeg, t_eeg, Fs_openephys)
+#         # plt.show()
+#         ax1.set_title(('first third of channel %d' % chan_num))
+#         fig.savefig('fig_check_eeg_spect/time_subset_chan_%02d.png' % chan_num)
+#         # exit(3)
+#         ax1.cla()
 
 def unwrap_quat(quat):
     """ Remove discontinuities from quaternion data, by letting values go above and below the range."""
@@ -421,8 +449,14 @@ def test_timing():
 
     folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
     Fs_openephys = 30000
+    all_eeg_channels = range(1,4)
 
-    (x_chan4, t_chan4) = load_openephys(folder, filename_eeg, Fs_openephys)
+
+    (x_eeg_all, t_eeg) = load_all_eeg(folder, Fs_openephys, all_eeg_channels)
+    x_eeg_all = reference_all_eeg(x_eeg_all)
+
+    # exit(3)
+    # (x_chan4, t_chan4) = load_openephys(folder, filename_eeg, Fs_openephys)
 
     # plot_time(ax1, x_chan4, t_chan4, xlabel='', ylabel='EEG Amplitude')
 
@@ -465,12 +499,19 @@ def test_timing():
     # plt.show()
 
     all_mvmt_onsets = np.concatenate((mvmt1_onsets, mvmt2_onsets))
-    x_eeg = x_chan4
-    t_eeg = t_chan4
+    # x_eeg = x_chan4
+    # t_eeg = t_chan4
 
-    (x_mean_onset, t_mean_onset) = calc_mean_onset(x_eeg, t_eeg, all_mvmt_onsets, 1,  1, Fs_openephys)
-    plot_time(ax, x_mean_onset, t_mean_onset, xlabel='', ylabel='eeg magnitude')
-    plt.show()
+    # for chan_num in range(1,33):
+    for chan_num in range(1,4):
+        # (x_eeg, t_eeg) = load_openephys(folder, ("100_CH%d_2.continuous" % chan_num), Fs_openephys)
+        x_eeg = x_eeg_all[chan_num, :]
+        (x_mean_onset, t_mean_onset) = calc_mean_onset(x_eeg, t_eeg, all_mvmt_onsets, 1,  1, Fs_openephys)
+        plot_time(ax, x_mean_onset, t_mean_onset,
+                  xlabel='time (s)', ylabel='eeg magnitude',
+                  title=('Mean EEG around movement onsets, channel %d' % chan_num))
+        fig2.savefig('fig_onset_all_chans/onsets_chan_%02d.png' % chan_num)
+        ax.cla()
     exit(3)
 
     # plt.hist(tdiffs, bins=1000)
@@ -479,7 +520,8 @@ def test_timing():
 
 
 test_timing()
-# plot_all_eeg()
+plot_all_eeg()
+
 
 # def main():
 # main()
