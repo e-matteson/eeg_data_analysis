@@ -2,6 +2,7 @@ import OpenEphys as ep
 import scipy.io.wavfile
 import numpy as np
 import scipy.signal as sig
+import math
 import matplotlib.pyplot as plt
 
 ###### LOADING / SAVING UTILITIES
@@ -52,6 +53,15 @@ def lowpass(data, cutoff, fs, order=5):
     b, a = sig.butter(order, normal_cutoff, btype='low', analog=False)
     y = sig.lfilter(b, a, data)
     return y
+
+def downsample(x, factor):
+    """Downsample 1D array x by factor.
+    Does not include an anti-aliasing filter!!!"""
+    x_copy = x.copy()
+    pad_size = math.ceil(float(x_copy.size)/factor)*factor - x_copy.size
+    x_padded = np.append(x_copy, np.zeros(pad_size)*np.NaN)
+    x_new = scipy.nanmean(x_padded.reshape(-1,factor), axis=1)
+    return x_new
 
 def unwrap_quat(x_motion, range_size=2**16):
     """ Remove discontinuities from quaternion data, by letting values go above and below the range."""
