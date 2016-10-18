@@ -13,8 +13,8 @@ def load_all_eeg(folder, Fs_openephys, all_channels):
     x_eeg_all = []
     last_t_eeg = None
     t_eeg = None
-    for chan_num in all_channels:
-        (x_eeg, t_eeg) = load_openephys_file(folder, ("100_CH%d_2.continuous" % chan_num), Fs_openephys)
+    for chan_name in all_channels:
+        (x_eeg, t_eeg) = load_openephys_file(folder, ("100_CH%d_2.continuous" % chan_name), Fs_openephys)
         x_eeg_all.append(x_eeg)
         if (last_t_eeg is not None) and not np.isclose(t_eeg, last_t_eeg).all():
             raise RuntimeError("load_and_preprocess_all_eeg: EEG file timestamps don't match")
@@ -67,15 +67,15 @@ def downsample_all_eeg(x_eeg_all, t_eeg, factor):
     Does not include an anti-aliasing filter!!!"""
     t_eeg_new = downsample(t_eeg, factor)
     x_eeg_all_new = []
-    for chan_num in range(x_eeg_all.shape[0]):
-        x_eeg_all_new.append(downsample(x_eeg_all[chan_num], factor))
+    for chan_index in range(x_eeg_all.shape[0]):
+        x_eeg_all_new.append(downsample(x_eeg_all[chan_index], factor))
 
     return (np.array(x_eeg_all_new), t_eeg_new)
 
 def lowpass_all_eeg(x_eeg_all, cutoff, Fs_eeg):
     x_eeg_all_copy = np.zeros(x_eeg_all.shape)
-    for chan_num in range(x_eeg_all.shape[0]):
-        x_eeg_all_copy[chan_num, :] = lowpass(x_eeg_all[chan_num, :], cutoff, Fs_eeg)
+    for chan_index in range(x_eeg_all.shape[0]):
+        x_eeg_all_copy[chan_index, :] = lowpass(x_eeg_all[chan_index, :], cutoff, Fs_eeg)
     return x_eeg_all_copy
 
 def get_mvmt_onsets():
@@ -120,14 +120,14 @@ def calc_mean_onset(x_eeg, t_eeg, mvmt_onsets, seconds_before, seconds_after, Fs
     return (x_mean_onset, t_mean_onset)
 
 def plot_mean_onsets_all_channels(all_mvmt_onsets, x_eeg_all, t_eeg, all_eeg_channels, Fs_eeg):
-    for chan_num in all_eeg_channels:
-        # (x_eeg, t_eeg) = load_openephys_file(folder, ("100_CH%d_2.continuous" % chan_num), Fs_eeg)
-        x_eeg = x_eeg_all[chan_num, :]
+    for chan_name in all_eeg_channels:
+        # (x_eeg, t_eeg) = load_openephys_file(folder, ("100_CH%d_2.continuous" % chan_name), Fs_eeg)
+        x_eeg = x_eeg_all[chan_name-1, :]
         (x_mean_onset, t_mean_onset) = calc_mean_onset(x_eeg, t_eeg, all_mvmt_onsets, 1,  1, Fs_eeg)
         plot_time(ax, x_mean_onset, t_mean_onset,
                   xlabel='time (s)', ylabel='eeg magnitude',
-                  title=('Mean EEG around movement onsets, channel %d' % chan_num))
-        # fig2.savefig('fig_onset_all_chans/onsets_chan_%02d.png' % chan_num)
+                  title=('Mean EEG around movement onsets, channel %d' % chan_name))
+        # fig2.savefig('fig_onset_all_chans/onsets_chan_%02d.png' % chan_name)
         # ax.cla()
         plt.show()
 
@@ -140,18 +140,36 @@ def main():
     folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
     Fs_openephys = 30000
 
-    eeg_downsample_factor = 20
+    eeg_downsample_factor = 30
     eeg_lowpass_cutoff = 100
-    all_eeg_channels = range(1,5)
-    # all_eeg_channels = range(1,33)
+    # all_eeg_channels = range(1,5)
+    all_eeg_channels = range(1,33)
 
     ##### load eeg data
     (x_eeg_all, t_eeg) = load_all_eeg(folder, Fs_openephys, all_eeg_channels)
     (x_eeg_all, t_eeg, Fs_eeg) = preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, Fs_openephys)
 
-    # # plot_all_eeg_time
-    # for chan_num in all_eeg_channels:
-    #     fig =
+    ##### plot all eeg, time and spectrogram
+    fig = plt.figure()
+    ax = fig.gca()
+    for chan_name in all_eeg_channels:
+        plot_time(ax, x_eeg_all[chan_name-1, :], t_eeg,
+                  xlabel='time (s)', ylabel='eeg magnitude',
+                  title=('Downsampled EEG, channel %d' % chan_name))
+        fig.savefig('fig_check_eeg_downsample/eeg_chan_%02d.png' % chan_name)
+
+        ax.cla()
+        calc_and_plot_spectrogram(ax,
+                                  x_eeg_all[chan_name-1],
+                                  t_eeg,
+                                  Fs_eeg,
+                                  freq_range=[0, eeg_lowpass_cutoff],
+                                  title=('Downsampled EEG, channel %d' % chan_name))
+        fig.savefig('fig_check_eeg_downsample/eeg_chan_%02d_spect.png' % chan_name)
+        ax.cla()
+
+    exit(3)
+
 
     plt.show()
 
