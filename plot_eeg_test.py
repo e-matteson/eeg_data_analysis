@@ -38,7 +38,7 @@ def preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, 
     #                           t_eeg[:Fs_openephys*2],
     #                           Fs_openephys)
 
-    # x_eeg_all = reference_all_eeg(x_eeg_all)
+    x_eeg_all = reference_all_eeg(x_eeg_all)
     x_eeg_all = lowpass_all_eeg(x_eeg_all, eeg_lowpass_cutoff, Fs_openephys)
 
     Fs_eeg = Fs_openephys / eeg_downsample_factor
@@ -88,10 +88,10 @@ def get_mvmt_onsets():
     # marked at downwards turning point of upper light blue
     mvmt2_onsets = [35.54, 46.52, 57.18, 66.97, 77.32, 87.95, 98.27, 108.62, 118.25, 127.95, 137.95 ]
 
-    # baseline = [21.0, 29.0]
+    baseline_interval = [21.0, 29.0]
 
     all_mvmt_onsets = np.concatenate((mvmt1_onsets, mvmt2_onsets))
-    return all_mvmt_onsets
+    return (all_mvmt_onsets, baseline_interval)
 
 def plot_mvmt_onset_lines(ax, mvmt_onsets, line_y_coords, Fs_eeg, color='k'):
     for onset in mvmt_onsets:
@@ -152,6 +152,36 @@ def plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_int
         fig.savefig('fig_onset_all_chans_downsample/onsets_chan_%02d.png' % chan_name)
         ax.cla()
 
+def calc_mean_baseline_power(x_eeg, t_eeg, baseline_interval, freq_index_interval, Fs_eeg):
+    """Return scalar value, baseline power for 1 channel"""
+    x_baseline_powers = []
+    baseline_indices = [np.searchsorted(t_eeg, baseline_interval[0]), np.searchsorted(t_eeg, baseline_interval[1])]
+    x_baseline = x_eeg[baseline_indices[0] : baseline_indices[1]]
+    (freq_bins, time_bins, Pxx) = calc_spectrogram(x_baseline, Fs_eeg,
+                                                   freq_range=[0,100],
+                                                   log=True)
+    print(freq_bins)
+    band_power = np.sum(Pxx[:, freq_index_interval[0]:freq_index_interval[1]], axis=1)
+    x_baseline_powers.append(band_power)
+    x_baseline_powers = np.array(x_baseline_powers)
+
+    x_mean_baseline_power = np.mean(np.mean(x_baseline_powers, axis=0), axis=0)
+    # x_sem_baseline_power = stats.sem(x_baseline_powers, axis=0)
+    # x_std_baseline_power = np.std(x_baseline_powers, axis=0)
+    freq_hz_interval = [freq_bins[freq_index_interval[0]], freq_bins[freq_index_interval[1]]]
+    return (x_mean_baseline_power, freq_hz_interval)
+
+def get_baseline_power_all_channels(x_eeg_all, t_eeg, baseline_interval, freq_interval, all_eeg_channels, Fs_eeg):
+    ####### get baseline power
+    baseline_power_all_channels = []
+    for chan_name in all_eeg_channels:
+        chan_index = all_eeg_channels.index(chan_name)
+        x_eeg = x_eeg_all[chan_index]
+        (x_mean_baseline_power, freq_hz_interval) = calc_mean_baseline_power(x_eeg, t_eeg, baseline_interval, freq_interval, Fs_eeg)
+        baseline_power_all_channels.append(x_mean_baseline_power)
+
+    return np.mean(baseline_power_all_channels)
+
 def calc_mean_onset_power(x_eeg, t_eeg, mvmt_onsets, time_interval, freq_index_interval, Fs_eeg):
     """Return 1 eeg channel freq-domain averaged over all mvmt_onset times.
     time_interval is [seconds_before_onset, seconds_after_onset]"""
@@ -178,8 +208,7 @@ def calc_mean_onset_power(x_eeg, t_eeg, mvmt_onsets, time_interval, freq_index_i
     return (x_mean_onset_power, x_sem_onset_power, t_mean_onset_power, x_onset_powers, freq_hz_interval)
 
 
-def plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_interval, freq_index_interval, all_eeg_channels, Fs_eeg):
-    rest_power = 1 #should really calculate a baseline/rest power
+def plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_interval, freq_index_interval, all_eeg_channels, Fs_eeg,baseline_power=1):
     fig = plt.figure()
     ax = fig.gca()
     print(all_eeg_channels)
@@ -199,13 +228,13 @@ def plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_i
         ##### plot mean
         title_str = ('EEG power in [%.1f - %.1f Hz] band averaged across\n %d movement onsets (channel %d)'
                      % (freq_hz_interval[0], freq_hz_interval[1], len(all_mvmt_onsets), chan_name))
-        plot_time(ax, toDecibels(x_mean_onset_power, rest_power), t_mean_onset_power,
+        plot_time(ax, toDecibels(x_mean_onset_power, baseline_power), t_mean_onset_power,
                   linewidth='4',
                   title=title_str,
                   color='black')
 
-        sem_high =       toDecibels(x_mean_onset_power + x_sem_onset_power, rest_power)
-        sem_low  =       toDecibels(x_mean_onset_power - x_sem_onset_power, rest_power)
+        sem_high =       toDecibels(x_mean_onset_power + x_sem_onset_power, baseline_power)
+        sem_low  =       toDecibels(x_mean_onset_power - x_sem_onset_power, baseline_power)
         # plot standard error
         ax.fill_between(t_mean_onset_power, sem_low, sem_high, color='grey')
 
@@ -268,15 +297,17 @@ def main():
 
 
 
-
-
     # ##### load motion data
     # (x_motion0, x_motion1, x_motion2, t_motion) =  get_motion(folder,
     #                                                           filename_motion,
     #                                                           filename_chunk_pin1,
     #                                                           filename_chunk_pin2,
     #                                                           Fs_openephys)
-    mvmt_onsets = get_mvmt_onsets()
+    (mvmt_onsets, baseline_interval) = get_mvmt_onsets()
+
+
+
+
     # plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, mvmt_onsets, [2, 2], all_eeg_channels, Fs_eeg)
 
     # freq_interval_list = [[0,16], [2,16], [4,16], [6,16], [8,16], [10,16],
@@ -288,10 +319,8 @@ def main():
 
     for freq_interval in freq_interval_list:
         print(freq_interval)
-        plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, mvmt_onsets, [2, 2], freq_interval, all_eeg_channels, Fs_eeg)
-    exit(3)
+        baseline_power = get_baseline_power_all_channels(x_eeg_all, t_eeg, baseline_interval, freq_interval, all_eeg_channels, Fs_eeg)
+        plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, mvmt_onsets, [2, 2], freq_interval, all_eeg_channels, Fs_eeg, baseline_power)
 
-
-    plt.show()
 
 main()
