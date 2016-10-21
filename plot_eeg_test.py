@@ -80,7 +80,7 @@ def lowpass_all_eeg(x_eeg_all, cutoff, Fs_eeg):
     return x_eeg_all_copy
 
 def get_mvmt_onsets():
-    """Return manually marked movement onsets"""
+    """Return manually marked movement onset times, in seconds"""
     # first mvmt1 is weird?
     # marked where upper blue and purple diverge
     mvmt1_onsets = [31.85, 43.00, 53.65, 63.75, 73.95, 84.5, 95.4, 105.25, 115.05, 124.45, 134.72 ]
@@ -169,6 +169,7 @@ def calc_mean_baseline_power(x_eeg, t_eeg, baseline_interval, freq_index_interva
     # x_sem_baseline_power = stats.sem(x_baseline_powers, axis=0)
     # x_std_baseline_power = np.std(x_baseline_powers, axis=0)
     freq_hz_interval = [freq_bins[freq_index_interval[0]], freq_bins[freq_index_interval[1]]]
+    print (freq_hz_interval)
     return (x_mean_baseline_power, freq_hz_interval)
 
 def get_baseline_power_all_channels(x_eeg_all, t_eeg, baseline_interval, freq_interval, all_eeg_channels, Fs_eeg):
@@ -258,6 +259,28 @@ def plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_i
                     % (freq_index_interval[0], freq_index_interval[1], chan_name))
         ax.cla()
 
+def plot_power_all_channels(x_eeg_all, t_eeg, freq_hz_interval, all_eeg_channels,
+                            Fs_eeg, baseline_power=1, titlestr='', index=0):
+    print(all_eeg_channels)
+    for chan_name in all_eeg_channels:
+        fig = plt.figure()
+        ax = fig.gca()
+        chan_index = all_eeg_channels.index(chan_name)
+        x_eeg = x_eeg_all[chan_index, :]
+        calc_and_plot_spectrogram(ax, x_eeg, t_eeg, Fs_eeg,
+                                  freq_range=freq_hz_interval,
+                                  log=True, log_ref=baseline_power,
+                                  xlabel='Time (s)',ylabel='Frequency (Hz)',
+                                  zlabel='PSD (dB)',
+                                  colorbar=True,
+                                  vmin=-30, vmax=10,
+                                  title=titlestr + (' channel %d' % chan_name))
+
+        filename =('fig_spectrogram_low/spectrogram_i%d_chan_%02d.png' % (index, chan_name))
+        fig.savefig(filename )
+        fig.clear()
+
+
 def main():
 
     filename_chunk_pin1 =  "100_ADC6_2.continuous"
@@ -268,6 +291,7 @@ def main():
 
     eeg_downsample_factor = 30
     eeg_lowpass_cutoff = 100
+
     # all_eeg_channels = range(1,3)
     # all_eeg_channels = range(1,33)
     all_eeg_channels = [2, 4, 6, 11, 12, 15, 24]
@@ -275,6 +299,8 @@ def main():
     ##### load eeg data
     (x_eeg_all, t_eeg) = load_all_eeg(folder, Fs_openephys, all_eeg_channels)
     (x_eeg_all, t_eeg, Fs_eeg) = preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, Fs_openephys)
+
+
 
     # ##### plot all eeg, time and spectrogram
     # fig = plt.figure()
@@ -305,6 +331,25 @@ def main():
     #                                                           Fs_openephys)
     (mvmt_onsets, baseline_interval) = get_mvmt_onsets()
 
+    baseline_power = get_baseline_power_all_channels(x_eeg_all, t_eeg,
+                                                     baseline_interval,
+                                                     [0,25],
+                                                     all_eeg_channels,
+                                                     Fs_eeg)
+    print (baseline_power)
+    print (mvmt_onsets)
+    index = 0
+    for onset in mvmt_onsets[3:5]:
+        (x_eeg_all_trunc, t_eeg_trunc) = truncate_to_range(x_eeg_all, t_eeg, [onset-2, onset+2])
+
+        plot_power_all_channels(x_eeg_all_trunc, t_eeg_trunc, [0,100],
+                                all_eeg_channels, Fs_eeg, baseline_power=baseline_power,
+                                index=index,
+                                titlestr=('CAR, lowpass %dHz, Fs=%dHz, \n 2016-09-27_19-02-40 '
+                                        % (eeg_lowpass_cutoff, Fs_eeg)))
+        index += 1
+
+    exit(3)
 
 
 
@@ -316,11 +361,23 @@ def main():
     #                       [8, 10], [1, 8], [3, 8], [5, 8], [7, 8]]
 
     freq_interval_list = [[3,8]]
+    time_interval = [2, 2]
 
     for freq_interval in freq_interval_list:
         print(freq_interval)
-        baseline_power = get_baseline_power_all_channels(x_eeg_all, t_eeg, baseline_interval, freq_interval, all_eeg_channels, Fs_eeg)
-        plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, mvmt_onsets, [2, 2], freq_interval, all_eeg_channels, Fs_eeg, baseline_power)
+        baseline_power = get_baseline_power_all_channels(x_eeg_all, t_eeg,
+                                                         baseline_interval,
+                                                         freq_interval,
+                                                         all_eeg_channels,
+                                                         Fs_eeg)
+
+        plot_mean_onset_power_all_channels(x_eeg_all, t_eeg,
+                                           mvmt_onsets,
+                                           time_interval,
+                                           freq_interval,
+                                           all_eeg_channels,
+                                           Fs_eeg,
+                                           baseline_power)
 
 
 main()

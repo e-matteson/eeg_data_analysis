@@ -120,6 +120,8 @@ def truncate_to_range(x, t, t_range):
     # TODO test!
     # TODO deal with diff x shapes
     # x and t are numpy arrays
+    # print (t_range)
+
     if t_range is None:
         return (x,t)
 
@@ -130,8 +132,21 @@ def truncate_to_range(x, t, t_range):
         range_indices[0] = np.argmax(t>t_range[0])
     if t_range[1] < t[-1]:
         range_indices[1] = np.argmax(t>t_range[1])
+
+    if len(new_x.shape) == 2:
+        # print(new_x.shape)
+        # print(new_t.shape)
+        assert new_x.shape[1] == new_t.shape[0]
         new_x = new_x[:, range_indices[0]:range_indices[1]]
-        new_t = new_t[range_indices[0]:range_indices[1]]
+    elif len(new_x.shape) == 1:
+        # print(new_x.shape)
+        # print(new_t.shape)
+        assert new_x.shape[0] == new_t.shape[0]
+        new_x = new_x[range_indices[0]:range_indices[1]]
+    else:
+        raise RuntimeError('truncate_to_range: x must be have shape (T) or (N,T)')
+
+    new_t = new_t[range_indices[0]:range_indices[1]]
     return (new_x, new_t)
 
 def calc_spectrogram(data, Fs, freq_range=None, log=True, log_ref=1):
@@ -159,11 +174,11 @@ def calc_spectrogram(data, Fs, freq_range=None, log=True, log_ref=1):
 
 ####### PLOTTING UTILITIES
 
-def plot_spectrogram(axes, Pxx, time_bins, freq_bins,title='',
-                     xlabel='Time (s)',ylabel='Frequency (Hz)',zlabel='PSD (dB)'):
+def plot_spectrogram(axes, Pxx, time_bins, freq_bins, title='', vmin=None, vmax=None,
+                     xlabel='Time (s)',ylabel='Frequency (Hz)',zlabel='PSD (dB)', colorbar=None):
     # TODO WHY ISN'T IT FILLING UP THE TIME AXIS??!!
-    print(Pxx.shape)
-    print(Pxx.transpose().shape)
+    # print(Pxx.shape)
+    # print(Pxx.transpose().shape)
     # print(time_bins.shape)
     # print(freq_bins.shape)
     # axes.plot(time_bins, Pxx[:, 128])
@@ -175,20 +190,29 @@ def plot_spectrogram(axes, Pxx, time_bins, freq_bins,title='',
         aspect="auto",
         extent=[time_bins[0],time_bins[-1],freq_bins[0],freq_bins[-1]],
         cmap=plt.cm.gist_heat,
-        interpolation="none")
+        interpolation="none",
+        vmin=vmin,
+        vmax=vmax)
 
     # cmap=plt.cm.gist_heat, interpolation="hanning")
     axes.set_xlabel(xlabel)
     axes.set_ylabel(ylabel)
     axes.set_title(title)
-    # plt.colorbar(im, ax=axes, orientation='horizontal').set_label(zlabel)
+    # print (title)
+    # if clim is not None:
+    #     axes.clim(clim)
+    if colorbar is not None:
+        plt.colorbar(im, ax=axes, orientation='horizontal').set_label(zlabel)
+
 
 def calc_and_plot_spectrogram(axes, data, t, Fs, freq_range=None, title='',
                               xlabel='Time (s)',ylabel='Frequency (Hz)',
-                              zlabel='PSD (dB)'):
+                              zlabel='PSD (dB)', colorbar=None, vmin=None, vmax=None, log=True, log_ref=1):
 
-    (freq_bins, time_bins, Pxx)=calc_spectrogram(data, Fs, freq_range=freq_range)
-    plot_spectrogram(axes, Pxx, time_bins, freq_bins, title='',
+    (freq_bins, time_bins, Pxx)=calc_spectrogram(data, Fs, freq_range=freq_range, log=log, log_ref=log_ref)
+
+    plot_spectrogram(axes, Pxx, time_bins + t[0],
+                     freq_bins, title=title, colorbar=colorbar, vmin=vmin, vmax=vmax,
                      xlabel=xlabel, ylabel=ylabel, zlabel=zlabel)
 
 def plot_quaternion(axes, x_motion, t_motion, title='', xlabel='Time (s)', ylabel='Amplitude',
