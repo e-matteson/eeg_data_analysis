@@ -295,6 +295,17 @@ def plot_power_all_channels(x_eeg_all, t_eeg, freq_hz_interval, all_eeg_channels
 
 def main():
 
+    folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
+    Fs_openephys = 30000
+    Fs_motion = 100 # motion sample rate in Hz
+    (x_audio, t_audio) =   load_openephys_file(folder, "100_ADC5_2.continuous", Fs_openephys)
+
+
+    # x_audio_low = lowpass(x_audio, 5000, Fs_openephys)
+    save_wav(x_audio, "audio_test.wav")
+
+    exit(3)
+
     # filename_chunk_pin1 =  "100_ADC6_2.continuous"
     # filename_chunk_pin2 =  "100_ADC7_2.continuous"
     # filename_motion =      "motion9-27-16_2.txt"
