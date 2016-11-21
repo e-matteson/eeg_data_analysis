@@ -1,8 +1,9 @@
+import math
+import os
 import OpenEphys as ep
-import scipy.io.wavfile
 import numpy as np
 import scipy.signal as sig
-import math
+import scipy.io.wavfile
 import matplotlib.pyplot as plt
 
 ###### LOADING / SAVING UTILITIES
@@ -31,6 +32,13 @@ def save_wav(data, filename, volume=1):
     scaled_data = np.int16(data/np.max(np.abs(data)) * volume * 32767)
     scipy.io.wavfile.write(filename, 44100, scaled_data)
 
+def make_directory(path):
+    try:
+        os.mkdir(path)
+    except FileExistsError:
+        print('directory %s exists, contents may be overwritten' % path)
+    else:
+        print('created directory %s' % path)
 
 ###### SIGNAL PROCESSING
 

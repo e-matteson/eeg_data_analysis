@@ -7,18 +7,30 @@ import numpy as np
 import scipy.signal as sig
 import scipy.stats as stats
 
+
 from MyUtilities import *
 from MotionLoading import *
 
-def load_all_eeg(folder, Fs_openephys, all_channels):
+def load_all_eeg(data_directory, Fs_openephys, all_channels, recording_number=1):
     x_eeg_all = []
     last_t_eeg = None
     t_eeg = None
+    # multiple recordings on the same day have _2, _3, ... in the file name
+    if recording_number == 1:
+        recording_number_str = ''
+    elif recording_number > 1:
+        recording_number_str = ('_%d' % recording_number)
+    else:
+        raise RuntimeError('load_all_eeg: invalid recording number')
+
     for chan_name in all_channels:
-        (x_eeg, t_eeg) = load_openephys_file(folder, ("100_CH%d_2.continuous" % chan_name), Fs_openephys)
+        filename = ("100_CH%d%s.continuous" % (chan_name, recording_number_str))
+        (x_eeg, t_eeg) = load_openephys_file(data_directory,
+                                             filename,
+                                             Fs_openephys)
         x_eeg_all.append(x_eeg)
         if (last_t_eeg is not None) and not np.isclose(t_eeg, last_t_eeg).all():
-            raise RuntimeError("load_and_preprocess_all_eeg: EEG file timestamps don't match")
+            raise RuntimeError("load_all_eeg: EEG file timestamps don't match")
         last_t_eeg = t_eeg
 
     x_eeg_all = np.array(x_eeg_all)
@@ -283,101 +295,140 @@ def plot_power_all_channels(x_eeg_all, t_eeg, freq_hz_interval, all_eeg_channels
 
 def main():
 
-    filename_chunk_pin1 =  "100_ADC6_2.continuous"
-    filename_chunk_pin2 =  "100_ADC7_2.continuous"
-    filename_motion =      "motion9-27-16_2.txt"
-    folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
-    Fs_openephys = 30000
+    # filename_chunk_pin1 =  "100_ADC6_2.continuous"
+    # filename_chunk_pin2 =  "100_ADC7_2.continuous"
+    # filename_motion =      "motion9-27-16_2.txt"
+    # data_directory = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_20-36-48/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_21-46-10/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-15-16/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-22-14/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-36-42/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-51-37/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-02-03/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-09-24/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-45-55/"
+    data_directory = "/home/em/prog/linux-64-master/2016-11-02_00-33-20/"
+
+    recording_number = 1
+
+    data_session_name = os.path.basename(data_directory.strip('/')) + (' rec%d' % recording_number)
+    print (data_session_name)
+    os.chdir(data_directory)
+
+    Fs_openephys = 30000  # this is a constant (unless we change openephys settings)
+    Fs_eeg = Fs_openephys # this should change when the eeg data is downsampled
 
     eeg_downsample_factor = 30
     eeg_lowpass_cutoff = 100
 
     # all_eeg_channels = range(1,3)
-    # all_eeg_channels = range(1,33)
-    all_eeg_channels = [2, 4, 6, 11, 12, 15, 24]
+    # all_eeg_channels = [2, 4, 6, 11, 12, 15, 24]
+    all_eeg_channels = range(1,33)
 
     ##### load eeg data
-    (x_eeg_all, t_eeg) = load_all_eeg(folder, Fs_openephys, all_eeg_channels)
+    (x_eeg_all, t_eeg) = load_all_eeg(data_directory, Fs_openephys, all_eeg_channels, recording_number)
+
+
+    ##### make figure directory
+    figure_directory = 'fig_noisetest_timefreq'
+    make_directory(figure_directory)
+
+    ##### plot all eeg, time and spectrogram
+    fig = plt.figure()
+    ax = fig.gca()
+
+    ### plot raw eeg
+    for chan_name in all_eeg_channels:
+        title_str = ('%s, Fs=%dHz, channel %d' % (data_session_name, Fs_eeg, chan_name))
+        calc_and_plot_spectrogram(ax,
+                                  x_eeg_all[chan_name-1],
+                                  t_eeg,
+                                  Fs_eeg,
+                                  title=title_str)
+        fig.savefig(figure_directory + '/chan_%02d_raw.png' % chan_name)
+        ax.cla()
+
+    ### filter and downsample eeg
     (x_eeg_all, t_eeg, Fs_eeg) = preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, Fs_openephys)
 
+    ### plot filtered eeg
+    for chan_name in all_eeg_channels:
+        chan_index = all_eeg_channels.index(chan_name)
+
+        title_str = ('%s, Fs=%d, lowpass %d, channel %d' % (data_session_name, Fs_eeg, eeg_lowpass_cutoff, chan_name))
+        plot_time(ax, x_eeg_all[chan_index, :], t_eeg,
+                  ylabel='EEG Magnitude',
+                  title=title_str)
+        fig.savefig(figure_directory + '/chan_%02d_time.png' % chan_name)
+
+        ax.cla()
+        calc_and_plot_spectrogram(ax,
+                                  x_eeg_all[chan_index],
+                                  t_eeg,
+                                  Fs_eeg,
+                                  freq_range=[0, eeg_lowpass_cutoff],
+                                  title=title_str)
+        fig.savefig(figure_directory + '/chan_%02d_freq.png' % chan_name)
+        ax.cla()
+
+    exit(0)
+
+    # # ##### load motion data
+    # # (x_motion0, x_motion1, x_motion2, t_motion) =  get_motion(data_directory,
+    # #                                                           filename_motion,
+    # #                                                           filename_chunk_pin1,
+    # #                                                           filename_chunk_pin2,
+    # #                                                           Fs_openephys)
+    # (mvmt_onsets, baseline_interval) = get_mvmt_onsets()
+
+    # baseline_power = get_baseline_power_all_channels(x_eeg_all, t_eeg,
+    #                                                  baseline_interval,
+    #                                                  [0,25],
+    #                                                  all_eeg_channels,
+    #                                                  Fs_eeg)
+    # print (baseline_power)
+    # print (mvmt_onsets)
+    # index = 0
+    # for onset in mvmt_onsets[3:5]:
+    #     (x_eeg_all_trunc, t_eeg_trunc) = truncate_to_range(x_eeg_all, t_eeg, [onset-2, onset+2])
+
+    #     plot_power_all_channels(x_eeg_all_trunc, t_eeg_trunc, [0,100],
+    #                             all_eeg_channels, Fs_eeg, baseline_power=baseline_power,
+    #                             index=index,
+    #                             titlestr=('CAR, lowpass %dHz, Fs=%dHz, \n 2016-09-27_19-02-40 '
+    #                                     % (eeg_lowpass_cutoff, Fs_eeg)))
+    #     index += 1
+
+    # exit(3)
 
 
-    # ##### plot all eeg, time and spectrogram
-    # fig = plt.figure()
-    # ax = fig.gca()
-    # for chan_name in all_eeg_channels:
-    #     plot_time(ax, x_eeg_all[chan_name-1, :], t_eeg,
-    #               xlabel='time (s)', ylabel='eeg magnitude',
-    #               title=('Downsampled EEG, channel %d' % chan_name))
-    #     fig.savefig('fig_check_eeg_downsample/eeg_chan_%02d.png' % chan_name)
 
-    #     ax.cla()
-    #     calc_and_plot_spectrogram(ax,
-    #                               x_eeg_all[chan_name-1],
-    #                               t_eeg,
-    #                               Fs_eeg,
-    #                               freq_range=[0, eeg_lowpass_cutoff],
-    #                               title=('Downsampled EEG, channel %d' % chan_name))
-    #     fig.savefig('fig_check_eeg_downsample/eeg_chan_%02d_spect.png' % chan_name)
-    #     ax.cla()
+    # # plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, mvmt_onsets, [2, 2], all_eeg_channels, Fs_eeg)
 
+    # # freq_interval_list = [[0,16], [2,16], [4,16], [6,16], [8,16], [10,16],
+    # #                       [12,16], [14,16], [1, 14], [3, 14], [5, 14], [7, 14],
+    # #                       [9, 14], [11, 14], [0, 10], [2, 10], [4, 10], [6, 10],
+    # #                       [8, 10], [1, 8], [3, 8], [5, 8], [7, 8]]
 
+    # freq_interval_list = [[3,8]]
+    # time_interval = [2, 2]
 
-    # ##### load motion data
-    # (x_motion0, x_motion1, x_motion2, t_motion) =  get_motion(folder,
-    #                                                           filename_motion,
-    #                                                           filename_chunk_pin1,
-    #                                                           filename_chunk_pin2,
-    #                                                           Fs_openephys)
-    (mvmt_onsets, baseline_interval) = get_mvmt_onsets()
+    # for freq_interval in freq_interval_list:
+    #     print(freq_interval)
+    #     baseline_power = get_baseline_power_all_channels(x_eeg_all, t_eeg,
+    #                                                      baseline_interval,
+    #                                                      freq_interval,
+    #                                                      all_eeg_channels,
+    #                                                      Fs_eeg)
 
-    baseline_power = get_baseline_power_all_channels(x_eeg_all, t_eeg,
-                                                     baseline_interval,
-                                                     [0,25],
-                                                     all_eeg_channels,
-                                                     Fs_eeg)
-    print (baseline_power)
-    print (mvmt_onsets)
-    index = 0
-    for onset in mvmt_onsets[3:5]:
-        (x_eeg_all_trunc, t_eeg_trunc) = truncate_to_range(x_eeg_all, t_eeg, [onset-2, onset+2])
-
-        plot_power_all_channels(x_eeg_all_trunc, t_eeg_trunc, [0,100],
-                                all_eeg_channels, Fs_eeg, baseline_power=baseline_power,
-                                index=index,
-                                titlestr=('CAR, lowpass %dHz, Fs=%dHz, \n 2016-09-27_19-02-40 '
-                                        % (eeg_lowpass_cutoff, Fs_eeg)))
-        index += 1
-
-    exit(3)
-
-
-
-    # plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, mvmt_onsets, [2, 2], all_eeg_channels, Fs_eeg)
-
-    # freq_interval_list = [[0,16], [2,16], [4,16], [6,16], [8,16], [10,16],
-    #                       [12,16], [14,16], [1, 14], [3, 14], [5, 14], [7, 14],
-    #                       [9, 14], [11, 14], [0, 10], [2, 10], [4, 10], [6, 10],
-    #                       [8, 10], [1, 8], [3, 8], [5, 8], [7, 8]]
-
-    freq_interval_list = [[3,8]]
-    time_interval = [2, 2]
-
-    for freq_interval in freq_interval_list:
-        print(freq_interval)
-        baseline_power = get_baseline_power_all_channels(x_eeg_all, t_eeg,
-                                                         baseline_interval,
-                                                         freq_interval,
-                                                         all_eeg_channels,
-                                                         Fs_eeg)
-
-        plot_mean_onset_power_all_channels(x_eeg_all, t_eeg,
-                                           mvmt_onsets,
-                                           time_interval,
-                                           freq_interval,
-                                           all_eeg_channels,
-                                           Fs_eeg,
-                                           baseline_power)
+    #     plot_mean_onset_power_all_channels(x_eeg_all, t_eeg,
+    #                                        mvmt_onsets,
+    #                                        time_interval,
+    #                                        freq_interval,
+    #                                        all_eeg_channels,
+    #                                        Fs_eeg,
+    #                                        baseline_power)
 
 
 main()
