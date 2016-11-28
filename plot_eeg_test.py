@@ -295,16 +295,6 @@ def plot_power_all_channels(x_eeg_all, t_eeg, freq_hz_interval, all_eeg_channels
 
 def main():
 
-    folder = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
-    Fs_openephys = 30000
-    Fs_motion = 100 # motion sample rate in Hz
-    (x_audio, t_audio) =   load_openephys_file(folder, "100_ADC5_2.continuous", Fs_openephys)
-
-
-    # x_audio_low = lowpass(x_audio, 5000, Fs_openephys)
-    save_wav(x_audio, "audio_test.wav")
-
-    exit(3)
 
     # filename_chunk_pin1 =  "100_ADC6_2.continuous"
     # filename_chunk_pin2 =  "100_ADC7_2.continuous"
@@ -319,7 +309,16 @@ def main():
     # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-02-03/"
     # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-09-24/"
     # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-45-55/"
-    data_directory = "/home/em/prog/linux-64-master/2016-11-02_00-33-20/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-02_00-33-20/"
+
+
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_17-49-06/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_17-57-58/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-37-28/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-47-51/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-55-13/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-59-00/"
+    data_directory = "/home/em/prog/linux-64-master/2016-11-21_19-05-36/"
 
     recording_number = 1
 
@@ -335,7 +334,8 @@ def main():
 
     # all_eeg_channels = range(1,3)
     # all_eeg_channels = [2, 4, 6, 11, 12, 15, 24]
-    all_eeg_channels = range(1,33)
+    # all_eeg_channels = range(1,33)
+    all_eeg_channels = [1, 8,24]
 
     ##### load eeg data
     (x_eeg_all, t_eeg) = load_all_eeg(data_directory, Fs_openephys, all_eeg_channels, recording_number)
@@ -352,8 +352,9 @@ def main():
     ### plot raw eeg
     for chan_name in all_eeg_channels:
         title_str = ('%s, Fs=%dHz, channel %d' % (data_session_name, Fs_eeg, chan_name))
+        chan_index = all_eeg_channels.index(chan_name)
         calc_and_plot_spectrogram(ax,
-                                  x_eeg_all[chan_name-1],
+                                  x_eeg_all[chan_index],
                                   t_eeg,
                                   Fs_eeg,
                                   title=title_str)
