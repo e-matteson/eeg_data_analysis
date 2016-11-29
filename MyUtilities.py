@@ -56,9 +56,17 @@ def are_intervals_close(time_array, value):
 
 def lowpass(data, cutoff, fs, order=5):
     # TODO check dimensions
-    nyq = 0.5 * fs
-    normal_cutoff = cutoff / nyq
-    b, a = sig.butter(order, normal_cutoff, btype='low', analog=False)
+    nyquist_freq = 0.5 * fs
+    normalized_cutoff = cutoff / nyquist_freq
+    b, a = sig.butter(order, normalized_cutoff, btype='low', analog=False)
+    y = sig.lfilter(b, a, data)
+    return y
+
+def highpass(data, cutoff, fs, order=5):
+    # TODO check dimensions
+    nyquist_freq = 0.5 * fs
+    normalized_cutoff = cutoff / nyquist_freq
+    b, a = sig.butter(order, normalized_cutoff, btype='high', analog=False)
     y = sig.lfilter(b, a, data)
     return y
 
@@ -70,6 +78,10 @@ def downsample(x, factor):
     x_padded = np.append(x_copy, np.zeros(pad_size)*np.NaN)
     x_new = scipy.nanmean(x_padded.reshape(-1,factor), axis=1)
     return x_new
+
+def moving_RMS(x, window_len):
+    window = sig.hamming(window_len)
+    return np.sqrt(np.convolve(np.power(x,2),window,'same'))
 
 def unwrap_quat(x_motion, range_size=2**16):
     """ Remove discontinuities from quaternion data, by letting values go above and below the range."""
@@ -142,6 +154,7 @@ def truncate_to_range(x, t, t_range):
         range_indices[1] = np.argmax(t>t_range[1])
 
     if len(new_x.shape) == 2:
+        # print("****")
         # print(new_x.shape)
         # print(new_t.shape)
         assert new_x.shape[1] == new_t.shape[0]
@@ -178,6 +191,8 @@ def calc_spectrogram(data, Fs, freq_range=None, log=True, log_ref=1):
         Pxx = 10*np.log10(Pxx/log_ref)
     Pxx, freq_bins = truncate_to_range(Pxx, freq_bins, freq_range)
     return (freq_bins, time_bins, Pxx)
+
+
 
 
 ####### PLOTTING UTILITIES
@@ -218,7 +233,7 @@ def calc_and_plot_spectrogram(axes, data, t, Fs, freq_range=None, title='',
                               zlabel='PSD (dB)', colorbar=None, vmin=None, vmax=None, log=True, log_ref=1):
 
     (freq_bins, time_bins, Pxx)=calc_spectrogram(data, Fs, freq_range=freq_range, log=log, log_ref=log_ref)
-
+    print(Pxx)
     plot_spectrogram(axes, Pxx, time_bins + t[0],
                      freq_bins, title=title, colorbar=colorbar, vmin=vmin, vmax=vmax,
                      xlabel=xlabel, ylabel=ylabel, zlabel=zlabel)

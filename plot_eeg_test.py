@@ -3,6 +3,7 @@
 import OpenEphys as ep
 import json
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import numpy as np
 import scipy.signal as sig
 import scipy.stats as stats
@@ -292,57 +293,10 @@ def plot_power_all_channels(x_eeg_all, t_eeg, freq_hz_interval, all_eeg_channels
         fig.savefig(filename )
         fig.clear()
 
-
-def main():
-
-
-    # filename_chunk_pin1 =  "100_ADC6_2.continuous"
-    # filename_chunk_pin2 =  "100_ADC7_2.continuous"
-    # filename_motion =      "motion9-27-16_2.txt"
-    # data_directory = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_20-36-48/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_21-46-10/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-15-16/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-22-14/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-36-42/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-51-37/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-02-03/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-09-24/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-45-55/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-02_00-33-20/"
-
-
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_17-49-06/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_17-57-58/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-37-28/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-47-51/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-55-13/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-59-00/"
-    data_directory = "/home/em/prog/linux-64-master/2016-11-21_19-05-36/"
-
-    recording_number = 1
-
-    data_session_name = os.path.basename(data_directory.strip('/')) + (' rec%d' % recording_number)
-    print (data_session_name)
-    os.chdir(data_directory)
-
-    Fs_openephys = 30000  # this is a constant (unless we change openephys settings)
-    Fs_eeg = Fs_openephys # this should change when the eeg data is downsampled
-
-    eeg_downsample_factor = 30
-    eeg_lowpass_cutoff = 100
-
-    # all_eeg_channels = range(1,3)
-    # all_eeg_channels = [2, 4, 6, 11, 12, 15, 24]
-    # all_eeg_channels = range(1,33)
-    all_eeg_channels = [1, 8,24]
-
-    ##### load eeg data
-    (x_eeg_all, t_eeg) = load_all_eeg(data_directory, Fs_openephys, all_eeg_channels, recording_number)
-
-
+def plot_quick_summary(all_eeg_channels, x_eeg_all, t_eeg, Fs_eeg, Fs_openephys,
+                       eeg_downsample_factor, eeg_lowpass_cutoff,
+                       data_session_name, figure_directory):
     ##### make figure directory
-    figure_directory = 'fig_noisetest_timefreq'
     make_directory(figure_directory)
 
     ##### plot all eeg, time and spectrogram
@@ -383,6 +337,155 @@ def main():
                                   title=title_str)
         fig.savefig(figure_directory + '/chan_%02d_freq.png' % chan_name)
         ax.cla()
+
+def plot_rms_noise_comparisons(Fs_openephys, Fs_eeg, directories):
+    fig = plt.figure()
+
+    high_cutoff = 1000
+    chan_name = 8
+    chan_index = 0
+
+    for data_directory in directories:
+        (x_eeg_all, t_eeg) = load_all_eeg(data_directory, Fs_openephys, [chan_name], 1)
+
+        ##### plot all eeg, time and spectrogram
+        ax1 = fig.add_subplot(1,2,1)
+        ax2 = fig.add_subplot(1,2,2)
+
+        ### get eeg power
+        x = x_eeg_all[chan_index]
+
+        x_high = highpass(x, high_cutoff, Fs_eeg)
+        rms = moving_RMS(x, 256)
+        rms_high = moving_RMS(x_high, 256)
+
+
+        ax1.plot(t_eeg, rms)
+        ax2.plot(t_eeg, rms_high)
+        ax1.set_title("a) Unfiltered EMG recordings")
+        ax2.set_title("b) Highpassed EMG recordings, %dHz" % high_cutoff)
+        ax1.set_xlabel("Time (s)")
+        ax1.set_ylabel("moving RMS (uV)")
+        fig.suptitle("Comparison of noise power in two EMG recordings, with different filters. In (a), the low frequency EMG signals are much stronger than the accelerometer noise, for both wall-power and battery-power recordings. \nIn (b), both the EMG recordings are highpass filtered to reveal accelerometer noise. The noise is reduced when the beaglebone is electrically isolated and battery-powered. \n\n Commit _______, channel 8, '2016-11-21_18-37-28' (wall) & '2016-11-21_18-31-56' (battery)")
+
+
+        ymin1 = ax1.get_ylim()[0]
+        height1 = ax1.get_ylim()[1] - ax1.get_ylim()[0]
+        ymin2 = ax2.get_ylim()[0]
+        height2 = ax2.get_ylim()[1] - ax2.get_ylim()[0]
+
+        acq_x_min = 21
+        acq_x_width = 25
+        acq_color = 'yellow'
+        ax1.add_patch(patches.Rectangle( (acq_x_min, ymin1),
+                                            acq_x_width, height1,
+                                            facecolor=acq_color,
+                                            edgecolor='none',
+                                            alpha=0.2
+        ))
+        ax2.add_patch(patches.Rectangle( (acq_x_min, ymin2),
+                                            acq_x_width, height2,
+                                            facecolor=acq_color,
+                                            edgecolor='none',
+                                            alpha=0.2
+        ))
+
+
+        box_x_mins = [6, 16, 26, 36]
+        box_w_widths = [5, 5,  5,  5]
+        movement_color = "grey"
+        for p in range(len(box_x_mins)):
+            ax1.add_patch(patches.Rectangle( (box_x_mins[p], ymin1),
+                                             box_w_widths[p], height1,
+                                             facecolor=movement_color,
+                                             edgecolor='none',
+                                             alpha=0.2
+            ))
+            ax2.add_patch(patches.Rectangle( (box_x_mins[p], ymin2),
+                                             box_w_widths[p], height2,
+                                             facecolor=movement_color,
+                                             edgecolor='none',
+                                             alpha=0.2
+            ))
+
+
+        ax1.legend(["wall power", "battery power", "accelerometer active", "muscle tensed"],
+                  # bbox_to_anchor=(.32, .25),
+                  # bbox_transform=plt.gcf().transFigure,
+                  # frameon=False
+        )
+
+
+    plt.show()
+
+
+
+def main():
+
+
+    # filename_chunk_pin1 =  "100_ADC6_2.continuous"
+    # filename_chunk_pin2 =  "100_ADC7_2.continuous"
+    # filename_motion =      "motion9-27-16_2.txt"
+    # data_directory = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_20-36-48/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_21-46-10/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-15-16/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-22-14/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-36-42/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-51-37/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-02-03/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-09-24/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-45-55/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-02_00-33-20/"
+
+
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_17-49-06/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_17-57-58/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-37-28/"
+
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-47-51/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-55-13/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-59-00/"
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_19-05-36/"
+
+    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-37-28/" # wall power
+    data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-31-56/" # battery power
+
+    recording_number = 1
+
+    data_session_name = os.path.basename(data_directory.strip('/')) + (' rec%d' % recording_number)
+    print (data_session_name)
+    os.chdir(data_directory)
+
+    Fs_openephys = 30000  # this is a constant (unless we change openephys settings)
+    Fs_eeg = Fs_openephys # this should change when the eeg data is downsampled
+
+    eeg_downsample_factor = 30
+    eeg_lowpass_cutoff = 100
+
+    # all_eeg_channels = range(1,3)
+    # all_eeg_channels = [2, 4, 6, 11, 12, 15, 24]
+    # all_eeg_channels = range(1,33)
+    # all_eeg_channels = [1, 8, 24]
+    all_eeg_channels = [8]
+
+    ##### load eeg data
+    (x_eeg_all, t_eeg) = load_all_eeg(data_directory, Fs_openephys, all_eeg_channels, recording_number)
+
+
+    # plot_quick_summary(all_eeg_channels, x_eeg_all, t_eeg, Fs_eeg, Fs_openephys,
+    #                    eeg_downsample_factor, eeg_lowpass_cutoff,
+    #                    data_session_name, 'fig_testdir')
+
+
+    ##### make figure directory
+    figure_directory = "fig_noise_power"
+    make_directory(figure_directory)
+
+    exit(3)
+
+
+
 
     exit(0)
 
@@ -443,4 +546,9 @@ def main():
     #                                        baseline_power)
 
 
-main()
+# main()
+
+plot_rms_noise_comparisons(30000, 30000, [
+    "/home/em/prog/linux-64-master/2016-11-21_18-37-28/", # wall power
+    "/home/em/prog/linux-64-master/2016-11-21_18-31-56/" # battery power
+])
