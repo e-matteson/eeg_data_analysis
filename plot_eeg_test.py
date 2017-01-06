@@ -12,30 +12,6 @@ import scipy.stats as stats
 from MyUtilities import *
 from MotionLoading import *
 
-def load_all_eeg(data_directory, Fs_openephys, all_channels, recording_number=1):
-    x_eeg_all = []
-    last_t_eeg = None
-    t_eeg = None
-    # multiple recordings on the same day have _2, _3, ... in the file name
-    if recording_number == 1:
-        recording_number_str = ''
-    elif recording_number > 1:
-        recording_number_str = ('_%d' % recording_number)
-    else:
-        raise RuntimeError('load_all_eeg: invalid recording number')
-
-    for chan_name in all_channels:
-        filename = ("100_CH%d%s.continuous" % (chan_name, recording_number_str))
-        (x_eeg, t_eeg) = load_openephys_file(data_directory,
-                                             filename,
-                                             Fs_openephys)
-        x_eeg_all.append(x_eeg)
-        if (last_t_eeg is not None) and not np.isclose(t_eeg, last_t_eeg).all():
-            raise RuntimeError("load_all_eeg: EEG file timestamps don't match")
-        last_t_eeg = t_eeg
-
-    x_eeg_all = np.array(x_eeg_all)
-    return (x_eeg_all, t_eeg)
 
 def preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, Fs_openephys):
     ##### quick and dirty before/after comparisons of common average referencing
@@ -66,6 +42,7 @@ def preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, 
     return (x_eeg_all, t_eeg, Fs_eeg)
 
 def reference_all_eeg(x_eeg_all):
+    """Return common average referenced EEG channels"""
     # common average reference
     x_eeg_all_copy = x_eeg_all.copy()
     common_avg = np.mean(x_eeg_all_copy, 0)
@@ -94,14 +71,14 @@ def lowpass_all_eeg(x_eeg_all, cutoff, Fs_eeg):
 
 def get_mvmt_onsets():
     """Return manually marked movement onset times, in seconds"""
-    # first mvmt1 is weird?
-    # marked where upper blue and purple diverge
-    mvmt1_onsets = [31.85, 43.00, 53.65, 63.75, 73.95, 84.5, 95.4, 105.25, 115.05, 124.45, 134.72 ]
+    # # first mvmt1 is weird?
+    # # marked where upper blue and purple diverge
+    # mvmt1_onsets = [31.85, 43.00, 53.65, 63.75, 73.95, 84.5, 95.4, 105.25, 115.05, 124.45, 134.72 ]
 
-    # marked at downwards turning point of upper light blue
-    mvmt2_onsets = [35.54, 46.52, 57.18, 66.97, 77.32, 87.95, 98.27, 108.62, 118.25, 127.95, 137.95 ]
+    # # marked at downwards turning point of upper light blue
+    # mvmt2_onsets = [35.54, 46.52, 57.18, 66.97, 77.32, 87.95, 98.27, 108.62, 118.25, 127.95, 137.95 ]
 
-    baseline_interval = [21.0, 29.0]
+    # baseline_interval = [21.0, 29.0]
 
     all_mvmt_onsets = np.concatenate((mvmt1_onsets, mvmt2_onsets))
     return (all_mvmt_onsets, baseline_interval)
@@ -222,7 +199,8 @@ def calc_mean_onset_power(x_eeg, t_eeg, mvmt_onsets, time_interval, freq_index_i
     return (x_mean_onset_power, x_sem_onset_power, t_mean_onset_power, x_onset_powers, freq_hz_interval)
 
 
-def plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_interval, freq_index_interval, all_eeg_channels, Fs_eeg,baseline_power=1):
+def plot_mean_onset_power_all_channels(x_eeg_all, t_eeg, all_mvmt_onsets, time_interval,
+                                       freq_index_interval, all_eeg_channels, Fs_eeg,baseline_power=1):
     fig = plt.figure()
     ax = fig.gca()
     print(all_eeg_channels)
@@ -297,7 +275,7 @@ def plot_quick_summary(all_eeg_channels, x_eeg_all, t_eeg, Fs_eeg, Fs_openephys,
                        eeg_downsample_factor, eeg_lowpass_cutoff,
                        data_session_name, figure_directory):
     ##### make figure directory
-    make_directory(figure_directory)
+    # make_directory(figure_directory)
 
     ##### plot all eeg, time and spectrogram
     fig = plt.figure()
@@ -346,7 +324,7 @@ def plot_rms_noise_comparisons(Fs_openephys, Fs_eeg, directories):
     chan_index = 0
 
     for data_directory in directories:
-        (x_eeg_all, t_eeg) = load_all_eeg(data_directory, Fs_openephys, [chan_name], 1)
+        (x_eeg_all, t_eeg) = load_eeg(data_directory, Fs_openephys, [chan_name], 1)
 
         ##### plot all eeg, time and spectrogram
         ax1 = fig.add_subplot(1,2,1)
@@ -362,11 +340,11 @@ def plot_rms_noise_comparisons(Fs_openephys, Fs_eeg, directories):
 
         ax1.plot(t_eeg, rms)
         ax2.plot(t_eeg, rms_high)
-        ax1.set_title("a) Unfiltered EMG recordings")
-        ax2.set_title("b) Highpassed EMG recordings, %dHz" % high_cutoff)
+        ax1.set_title("a) Unfiltered recordings")
+        ax2.set_title("b) Highpassed recordings, %dHz" % high_cutoff)
         ax1.set_xlabel("Time (s)")
         ax1.set_ylabel("moving RMS (uV)")
-        fig.suptitle("Comparison of noise power in two EMG recordings, with different filters. In (a), the low frequency EMG signals are much stronger than the accelerometer noise, for both wall-power and battery-power recordings. \nIn (b), both the EMG recordings are highpass filtered to reveal accelerometer noise. The noise is reduced when the beaglebone is electrically isolated and battery-powered. \n\n Commit _______, channel 8, '2016-11-21_18-37-28' (wall) & '2016-11-21_18-31-56' (battery)")
+        # fig.suptitle("Comparison of noise power in two EMG recordings, with different filters. In (a), the low frequency EMG signals are much stronger than the accelerometer noise, for both wall-power and battery-power recordings. \nIn (b), both the EMG recordings are highpass filtered to reveal accelerometer noise. The noise is reduced when the beaglebone is electrically isolated and battery-powered. \n\n Commit _______, channel 8, '2016-11-21_18-37-28' (wall) & '2016-11-21_18-31-56' (battery)")
 
 
         ymin1 = ax1.get_ylim()[0]
@@ -418,137 +396,108 @@ def plot_rms_noise_comparisons(Fs_openephys, Fs_eeg, directories):
 
     plt.show()
 
+def plot_eye_alpha():
+    # for 1/5/17 recording test
+    # data_directory = "/home/em/prog/linux-64-master/2017-01-05_00-15-09/"
+    data_directory = "/home/em/prog/linux-64-master/2017-01-05_00-19-20/" # with accel, but looks better for alpha
+    figure_directory = "fig_eye_alpha"
+    all_eeg_channels = range(9,33)
+    # plot_eeg_channels = [12]
+    # plot_eeg_channels = [32]
+    plot_eeg_channels = all_eeg_channels
+    eeg_downsample_factor = 75
+    eeg_lowpass_cutoff = 70
+    eyes_closed_intervals = [(5,10), (15,20), (25,30), (35,40), (45,50), (55,60)]
+    # subtitle = "Alpha power increases during the 5 second periods when eyes are closed."
+    # subtitle = "Suspected EMG artifacts during the 5 second periods when eyes are closed."
+    subtitle = ""
+
+    Fs_openephys = 30000  # this is a constant (unless we change openephys settings)
+    Fs_eeg = Fs_openephys # this should change when the eeg data is downsampled
+
+    recording_number = 1
+    data_session_name = os.path.basename(data_directory.strip('/')) + (' rec%d' % recording_number)
+    print(data_session_name)
+    os.chdir(data_directory)
+
+    ##### load eeg data
+    (x_eeg_all, t_eeg) = load_eeg(data_directory, Fs_openephys, all_eeg_channels, recording_number)
+
+    ##### make figure directory
+    make_directory(figure_directory)
+
+    ### filter, reference, and downsample eeg
+    (x_eeg_all, t_eeg, Fs_eeg) = preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, Fs_openephys)
+
+    fig = plt.figure()
+    ax = fig.gca()
+
+    for chan_name in plot_eeg_channels:
+        chan_index = all_eeg_channels.index(chan_name)
+
+        title_str = ('%s, Fs=%d, Fc_low=%d, chan %d, commit ____ \n%s' % (data_session_name, Fs_eeg, eeg_lowpass_cutoff, chan_name, subtitle))
+        calc_and_plot_spectrogram(ax,
+                                  x_eeg_all[chan_index],
+                                  t_eeg,
+                                  Fs_eeg,
+                                  freq_range=[0, eeg_lowpass_cutoff],
+                                  title=title_str)
+
+        ymin = -2
+        box_height = 1
+        for interval in eyes_closed_intervals:
+            ax.add_patch(patches.Rectangle((interval[0], ymin),
+                                           interval[1] - interval[0], box_height,
+                                           facecolor='grey',
+                                           edgecolor='none',
+                                           alpha=1.0
+            ))
+
+        # ax.relim()
+        ax.autoscale_view(True, True, True)
+        ax.legend(["Eyes closed \n(approximate times)"])
+
+        fig.savefig(figure_directory + '/chan_%02d_eye_freq.png' % chan_name)
+        ax.cla()
 
 
 def main():
 
-
     # filename_chunk_pin1 =  "100_ADC6_2.continuous"
     # filename_chunk_pin2 =  "100_ADC7_2.continuous"
     # filename_motion =      "motion9-27-16_2.txt"
-    # data_directory = "/home/em/new_data/eeg_test_9-27-16/2016-09-27_19-02-40/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_20-36-48/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_21-46-10/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-15-16/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-22-14/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-36-42/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_22-51-37/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-02-03/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-09-24/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-01_23-45-55/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-02_00-33-20/"
-
-
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_17-49-06/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_17-57-58/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-37-28/"
-
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-47-51/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-55-13/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-59-00/"
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_19-05-36/"
-
-    # data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-37-28/" # wall power
-    data_directory = "/home/em/prog/linux-64-master/2016-11-21_18-31-56/" # battery power
-
+    data_directory = "/home/em/prog/linux-64-master/2017-01-05_00-15-09/"
     recording_number = 1
-
     data_session_name = os.path.basename(data_directory.strip('/')) + (' rec%d' % recording_number)
-    print (data_session_name)
+    print(data_session_name)
     os.chdir(data_directory)
 
     Fs_openephys = 30000  # this is a constant (unless we change openephys settings)
     Fs_eeg = Fs_openephys # this should change when the eeg data is downsampled
 
-    eeg_downsample_factor = 30
-    eeg_lowpass_cutoff = 100
+    # eeg_downsample_factor = 30
+    eeg_downsample_factor = 75
+    eeg_lowpass_cutoff = 70
 
     # all_eeg_channels = range(1,3)
     # all_eeg_channels = [2, 4, 6, 11, 12, 15, 24]
     # all_eeg_channels = range(1,33)
     # all_eeg_channels = [1, 8, 24]
-    all_eeg_channels = [8]
+    all_eeg_channels = range(9,33)
 
     ##### load eeg data
-    (x_eeg_all, t_eeg) = load_all_eeg(data_directory, Fs_openephys, all_eeg_channels, recording_number)
-
-
-    # plot_quick_summary(all_eeg_channels, x_eeg_all, t_eeg, Fs_eeg, Fs_openephys,
-    #                    eeg_downsample_factor, eeg_lowpass_cutoff,
-    #                    data_session_name, 'fig_testdir')
+    (x_eeg_all, t_eeg) = load_eeg(data_directory, Fs_openephys, all_eeg_channels, recording_number)
 
 
     ##### make figure directory
-    figure_directory = "fig_noise_power"
+    figure_directory = "fig_eye_alpha"
     make_directory(figure_directory)
 
-    exit(3)
+    plot_quick_summary(all_eeg_channels, x_eeg_all, t_eeg, Fs_eeg, Fs_openephys,
+                       eeg_downsample_factor, eeg_lowpass_cutoff,
+                       data_session_name, figure_directory)
 
-
-
-
-    exit(0)
-
-    # # ##### load motion data
-    # # (x_motion0, x_motion1, x_motion2, t_motion) =  get_motion(data_directory,
-    # #                                                           filename_motion,
-    # #                                                           filename_chunk_pin1,
-    # #                                                           filename_chunk_pin2,
-    # #                                                           Fs_openephys)
-    # (mvmt_onsets, baseline_interval) = get_mvmt_onsets()
-
-    # baseline_power = get_baseline_power_all_channels(x_eeg_all, t_eeg,
-    #                                                  baseline_interval,
-    #                                                  [0,25],
-    #                                                  all_eeg_channels,
-    #                                                  Fs_eeg)
-    # print (baseline_power)
-    # print (mvmt_onsets)
-    # index = 0
-    # for onset in mvmt_onsets[3:5]:
-    #     (x_eeg_all_trunc, t_eeg_trunc) = truncate_to_range(x_eeg_all, t_eeg, [onset-2, onset+2])
-
-    #     plot_power_all_channels(x_eeg_all_trunc, t_eeg_trunc, [0,100],
-    #                             all_eeg_channels, Fs_eeg, baseline_power=baseline_power,
-    #                             index=index,
-    #                             titlestr=('CAR, lowpass %dHz, Fs=%dHz, \n 2016-09-27_19-02-40 '
-    #                                     % (eeg_lowpass_cutoff, Fs_eeg)))
-    #     index += 1
-
-    # exit(3)
-
-
-
-    # # plot_mean_onset_LMP_all_channels(x_eeg_all, t_eeg, mvmt_onsets, [2, 2], all_eeg_channels, Fs_eeg)
-
-    # # freq_interval_list = [[0,16], [2,16], [4,16], [6,16], [8,16], [10,16],
-    # #                       [12,16], [14,16], [1, 14], [3, 14], [5, 14], [7, 14],
-    # #                       [9, 14], [11, 14], [0, 10], [2, 10], [4, 10], [6, 10],
-    # #                       [8, 10], [1, 8], [3, 8], [5, 8], [7, 8]]
-
-    # freq_interval_list = [[3,8]]
-    # time_interval = [2, 2]
-
-    # for freq_interval in freq_interval_list:
-    #     print(freq_interval)
-    #     baseline_power = get_baseline_power_all_channels(x_eeg_all, t_eeg,
-    #                                                      baseline_interval,
-    #                                                      freq_interval,
-    #                                                      all_eeg_channels,
-    #                                                      Fs_eeg)
-
-    #     plot_mean_onset_power_all_channels(x_eeg_all, t_eeg,
-    #                                        mvmt_onsets,
-    #                                        time_interval,
-    #                                        freq_interval,
-    #                                        all_eeg_channels,
-    #                                        Fs_eeg,
-    #                                        baseline_power)
 
 
 # main()
-
-plot_rms_noise_comparisons(30000, 30000, [
-    "/home/em/prog/linux-64-master/2016-11-21_18-37-28/", # wall power
-    "/home/em/prog/linux-64-master/2016-11-21_18-31-56/" # battery power
-])
+plot_eye_alpha()

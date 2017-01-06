@@ -7,6 +7,38 @@ import scipy.io.wavfile
 import matplotlib.pyplot as plt
 
 ###### LOADING / SAVING UTILITIES
+
+def load_eeg(data_directory, Fs_openephys, all_channels, recording_number=1):
+    return load_openephys_files('100_CH',data_directory, Fs_openephys, all_channels, recording_number)
+
+def load_analog_in(data_directory, Fs_openephys, all_channels, recording_number=1):
+    return load_openephys_files('100_ADC',data_directory, Fs_openephys, all_channels, recording_number)
+
+def load_openephys_files(prefix, data_directory, Fs_openephys, channel_names, recording_number=1):
+    x_all = []
+    last_t = None
+    t = None
+    # multiple recordings on the same day have _2, _3, ... in the file name
+    if recording_number == 1:
+        recording_number_str = ''
+    elif recording_number > 1:
+        recording_number_str = ('_%d' % recording_number)
+    else:
+        raise RuntimeError('load_openephys_files: invalid recording number')
+
+    for chan_name in channel_names:
+        filename = ("%s%d%s.continuous" % (prefix, chan_name, recording_number_str))
+        (x, t) = load_openephys_file(data_directory,
+                                             filename,
+                                             Fs_openephys)
+        x_all.append(x)
+        if (last_t is not None) and not np.isclose(t, last_t).all():
+            raise RuntimeError("load_openephys_files: file timestamps don't match")
+        last_t = t
+
+    x_all = np.array(x_all)
+    return (x_all, t)
+
 def load_openephys_file(folder, filename, Fs_openephys):
     # always constant for openephys format, at least as of now
     SAMPLES_PER_RECORD = 1024
@@ -233,7 +265,7 @@ def calc_and_plot_spectrogram(axes, data, t, Fs, freq_range=None, title='',
                               zlabel='PSD (dB)', colorbar=None, vmin=None, vmax=None, log=True, log_ref=1):
 
     (freq_bins, time_bins, Pxx)=calc_spectrogram(data, Fs, freq_range=freq_range, log=log, log_ref=log_ref)
-    print(Pxx)
+    # print(Pxx)
     plot_spectrogram(axes, Pxx, time_bins + t[0],
                      freq_bins, title=title, colorbar=colorbar, vmin=vmin, vmax=vmax,
                      xlabel=xlabel, ylabel=ylabel, zlabel=zlabel)
