@@ -403,14 +403,14 @@ def plot_eye_alpha():
     figure_directory = "fig_eye_alpha"
     all_eeg_channels = range(9,33)
     # plot_eeg_channels = [12]
-    # plot_eeg_channels = [32]
-    plot_eeg_channels = all_eeg_channels
+    plot_eeg_channels = [32]
+    # plot_eeg_channels = all_eeg_channels
     eeg_downsample_factor = 75
     eeg_lowpass_cutoff = 70
     eyes_closed_intervals = [(5,10), (15,20), (25,30), (35,40), (45,50), (55,60)]
     # subtitle = "Alpha power increases during the 5 second periods when eyes are closed."
-    # subtitle = "Suspected EMG artifacts during the 5 second periods when eyes are closed."
-    subtitle = ""
+    subtitle = "Suspected EMG artifacts during the 5 second periods when eyes are closed."
+    # subtitle = "Eyes open/close every 5 seconds"
 
     Fs_openephys = 30000  # this is a constant (unless we change openephys settings)
     Fs_eeg = Fs_openephys # this should change when the eeg data is downsampled
@@ -435,7 +435,9 @@ def plot_eye_alpha():
     for chan_name in plot_eeg_channels:
         chan_index = all_eeg_channels.index(chan_name)
 
-        title_str = ('%s, Fs=%d, Fc_low=%d, chan %d, commit ____ \n%s' % (data_session_name, Fs_eeg, eeg_lowpass_cutoff, chan_name, subtitle))
+        # commit = "2e44da5"
+        commit = "____"
+        title_str = ('%s, Fs=%d, Fc_low=%d, chan %d, commit %s\n%s' % (data_session_name, Fs_eeg, eeg_lowpass_cutoff, chan_name, commit, subtitle))
         calc_and_plot_spectrogram(ax,
                                   x_eeg_all[chan_index],
                                   t_eeg,
@@ -457,16 +459,28 @@ def plot_eye_alpha():
         ax.autoscale_view(True, True, True)
         ax.legend(["Eyes closed \n(approximate times)"])
 
-        fig.savefig(figure_directory + '/chan_%02d_eye_freq.png' % chan_name)
+        fig.savefig(figure_directory + '/chan_%02d_eye_freq_star.png' % chan_name)
         ax.cla()
 
+def plot_sync_stuff():
+    data_directory = "/home/em/prog/linux-64-master/2017-01-05_00-37-06/"
+    recording_number = 1
+    data_session_name = os.path.basename(data_directory.strip('/')) + (' rec%d' % recording_number)
+    print(data_session_name)
+    os.chdir(data_directory)
+
+    Fs_openephys = 30000  # this is a constant (unless we change openephys settings)
+    all_adc_channels = range(1,9)
+
+    (x_adc_all, t_adc) = load_analog_in(data_directory, Fs_openephys, all_adc_channels, recording_number)
 
 def main():
 
     # filename_chunk_pin1 =  "100_ADC6_2.continuous"
     # filename_chunk_pin2 =  "100_ADC7_2.continuous"
     # filename_motion =      "motion9-27-16_2.txt"
-    data_directory = "/home/em/prog/linux-64-master/2017-01-05_00-15-09/"
+    # data_directory = "/home/em/prog/linux-64-master/2017-01-05_00-15-09/"
+    data_directory = "/home/em/prog/linux-64-master/2017-01-05_00-37-06/"
     recording_number = 1
     data_session_name = os.path.basename(data_directory.strip('/')) + (' rec%d' % recording_number)
     print(data_session_name)
@@ -490,7 +504,7 @@ def main():
 
 
     ##### make figure directory
-    figure_directory = "fig_eye_alpha"
+    figure_directory = "fig_quick_summaries"
     make_directory(figure_directory)
 
     plot_quick_summary(all_eeg_channels, x_eeg_all, t_eeg, Fs_eeg, Fs_openephys,
@@ -499,5 +513,6 @@ def main():
 
 
 
-# main()
-plot_eye_alpha()
+main()
+# plot_eye_alpha()
+# plot_sync_stuff()
