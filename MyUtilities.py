@@ -42,7 +42,7 @@ def load_openephys_files(prefix, data_directory, Fs_openephys, channel_names, re
 def load_openephys_file(folder, filename, Fs_openephys):
     # always constant for openephys format, at least as of now
     SAMPLES_PER_RECORD = 1024
-    all = ep.loadContinuous(folder + filename)
+    all = ep.loadContinuous(os.path.join(folder, filename))
     header = all['header']
     sampleRate = int(header['sampleRate'])
     if sampleRate != Fs_openephys:

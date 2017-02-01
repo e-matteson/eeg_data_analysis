@@ -13,7 +13,7 @@ from MyUtilities import *
 from MotionLoading import *
 
 
-def preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, Fs_openephys):
+def preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, Fs_openephys, use_CAR=True):
     ##### quick and dirty before/after comparisons of common average referencing
     # fig1 = plt.figure()
     # ax1 = fig1.gca()
@@ -27,7 +27,9 @@ def preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, 
     #                           t_eeg[:Fs_openephys*2],
     #                           Fs_openephys)
 
-    x_eeg_all = reference_all_eeg(x_eeg_all)
+    if use_CAR:
+        x_eeg_all = reference_all_eeg(x_eeg_all)
+
     x_eeg_all = lowpass_all_eeg(x_eeg_all, eeg_lowpass_cutoff, Fs_openephys)
 
     Fs_eeg = Fs_openephys / eeg_downsample_factor
@@ -273,7 +275,7 @@ def plot_power_all_channels(x_eeg_all, t_eeg, freq_hz_interval, all_eeg_channels
 
 def plot_quick_summary(all_eeg_channels, x_eeg_all, t_eeg, Fs_eeg, Fs_openephys,
                        eeg_downsample_factor, eeg_lowpass_cutoff,
-                       data_session_name, figure_directory):
+                       data_session_name, figure_directory, use_CAR=True):
     ##### make figure directory
     # make_directory(figure_directory)
 
@@ -294,7 +296,7 @@ def plot_quick_summary(all_eeg_channels, x_eeg_all, t_eeg, Fs_eeg, Fs_openephys,
         ax.cla()
 
     ### filter and downsample eeg
-    (x_eeg_all, t_eeg, Fs_eeg) = preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, Fs_openephys)
+    (x_eeg_all, t_eeg, Fs_eeg) = preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, Fs_openephys, use_CAR=use_CAR)
 
     ### plot filtered eeg
     for chan_name in all_eeg_channels:
@@ -411,6 +413,7 @@ def plot_eye_alpha():
     # subtitle = "Alpha power increases during the 5 second periods when eyes are closed."
     subtitle = "Suspected EMG artifacts during the 5 second periods when eyes are closed."
     # subtitle = "Eyes open/close every 5 seconds"
+    use_CAR = True
 
     Fs_openephys = 30000  # this is a constant (unless we change openephys settings)
     Fs_eeg = Fs_openephys # this should change when the eeg data is downsampled
@@ -427,7 +430,7 @@ def plot_eye_alpha():
     make_directory(figure_directory)
 
     ### filter, reference, and downsample eeg
-    (x_eeg_all, t_eeg, Fs_eeg) = preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, Fs_openephys)
+    (x_eeg_all, t_eeg, Fs_eeg) = preprocess_eeg(x_eeg_all, t_eeg, eeg_lowpass_cutoff, eeg_downsample_factor, Fs_openephys, use_CAR=use_CAR)
 
     fig = plt.figure()
     ax = fig.gca()
@@ -463,7 +466,7 @@ def plot_eye_alpha():
         ax.cla()
 
 def plot_sync_stuff():
-    data_directory = "/home/em/prog/linux-64-master/2017-01-05_00-37-06/"
+    # data_directory = "/home/em/prog/linux-64-master/2017-01-05_00-37-06/"
     recording_number = 1
     data_session_name = os.path.basename(data_directory.strip('/')) + (' rec%d' % recording_number)
     print(data_session_name)
@@ -480,7 +483,9 @@ def main():
     # filename_chunk_pin2 =  "100_ADC7_2.continuous"
     # filename_motion =      "motion9-27-16_2.txt"
     # data_directory = "/home/em/prog/linux-64-master/2017-01-05_00-15-09/"
-    data_directory = "/home/em/prog/linux-64-master/2017-01-05_00-37-06/"
+    # data_directory = "/home/em/prog/linux-64-master/2017-01-05_00-37-06/"
+    # data_directory = "/home/em/data/eeg_tests/2017-01-30_19-17-10"
+    data_directory = "/home/em/data/eeg_tests/2017-01-30_18-51-25"
     recording_number = 1
     data_session_name = os.path.basename(data_directory.strip('/')) + (' rec%d' % recording_number)
     print(data_session_name)
@@ -495,12 +500,15 @@ def main():
 
     # all_eeg_channels = range(1,3)
     # all_eeg_channels = [2, 4, 6, 11, 12, 15, 24]
-    # all_eeg_channels = range(1,33)
+    all_eeg_channels = range(1,33)
     # all_eeg_channels = [1, 8, 24]
-    all_eeg_channels = range(9,33)
+    # all_eeg_channels = range(9,33)
 
     ##### load eeg data
     (x_eeg_all, t_eeg) = load_eeg(data_directory, Fs_openephys, all_eeg_channels, recording_number)
+    print(x_eeg_all)
+    print(x_eeg_all.shape)
+    exit(3)
 
 
     ##### make figure directory
@@ -509,10 +517,114 @@ def main():
 
     plot_quick_summary(all_eeg_channels, x_eeg_all, t_eeg, Fs_eeg, Fs_openephys,
                        eeg_downsample_factor, eeg_lowpass_cutoff,
-                       data_session_name, figure_directory)
+                       data_session_name, figure_directory, use_CAR=use_CAR)
 
 
 
 main()
 # plot_eye_alpha()
 # plot_sync_stuff()
+
+class AnalogData:
+
+    def __init__(self, x_all, t, original_Fs, channel_nums):
+        # 2d numpy array, len(channel_nums) by len(t)
+        self.x_all = x_all
+
+        # 1d numpy array, timepoints for each sample
+        self.t = t
+
+        # Original sampling rate (constant determined by open ephys settings)
+        self.original_Fs = original_Fs
+
+        # Current sampling rate (may change if downsampled)
+        self.Fs = original_Fs
+
+        # List of channel numbers that match the numbers in open ephys file
+        #  names. These are NOT indices into x_all.
+        self.channel_nums = channel_nums
+
+
+class Session:
+    # TODO add motion data class
+
+    # Assume that every recording is in a separate directory, so we don't have
+    # to keep track of the recording number appended to the end of the open
+    # ephys filenames. This requires that you restart the open ephys GUI
+    # between each time you press record.
+
+    # this sample rate is a constant (unless we change open ephys settings)
+    Fs_openephys = 30000
+    open_ephys_wrapper = OpenEphysWrapper()
+
+    def __init__(self, directory, name=None, eeg_data=None, sync_data=None):
+        self.directory = directory # path of directory containing data files
+
+        if name is not None:
+            self.name = name  # the name of the session, for use in figure titles etc
+        else:
+            # if a session name is not supplied, use the name of the data directory
+            self.name = os.path.basename(directory.strip('/'))
+
+        if eeg_data is not None:
+            self.eeg_data = eeg_data    # AnalogData object containing EEG data
+        if sync_data is not None:
+            self.sync_data = sync_data  # AnalogData object containing sync pulses
+
+    def load_eeg(self, channel_nums):
+        if self.eeg_data is not None:
+            raise RuntimeError("EEG data has already been loaded, what are you doing?")
+
+        (x_all, t) = open_ephys_wrapper.load_continuous_files('100_CH', self.directory, self.Fs_openephys, channel_nums)
+        self.eeg_data = AnalogData(x_all, t, self.Fs_openephys, channel_nums)
+
+    # def load_analog_in(data_directory, Fs_openephys, all_channels, recording_number=1):
+    #     return load_openephys_files('100_ADC',data_directory, Fs_openephys, all_channels, recording_number)
+
+class OpenEphysWrapper:
+    def __init__():
+        # I dunno
+
+    def load_continuous_file(path, Fs_openephys):
+        # always constant for openephys format, at least as of now
+        SAMPLES_PER_RECORD = 1024
+        all = ep.loadContinuous(path)
+        header = all['header']
+        sampleRate = int(header['sampleRate'])
+        if sampleRate != Fs_openephys:
+            raise RuntimeError('load_openephys_file: unexpected sample rate')
+
+        x = all['data']
+
+        # get timestamps for each record
+        timestamps = all['timestamps']
+        # compute timestamps for each sample - I think this is the right way...
+        t = np.array([np.arange(time, time+1024) for time in timestamps]).flatten() / sampleRate
+        if not are_intervals_close(t, 1/sampleRate):
+            raise RuntimeError('load_openephys_file: timestamps may be wrong')
+        return (x,t)
+
+    def load_continuous_files(prefix, data_directory, Fs_openephys, channel_names, recording_number=1):
+        x_all = []
+        last_t = None
+        t = None
+        # multiple recordings on the same day have _2, _3, ... in the file name
+        if recording_number == 1:
+            recording_number_str = ''
+        elif recording_number > 1:
+            recording_number_str = ('_%d' % recording_number)
+        else:
+            raise RuntimeError('load_openephys_files: invalid recording number')
+
+        for chan_name in channel_names:
+            filename = ("%s%d%s.continuous" % (prefix, chan_name, recording_number_str))
+            (x, t) = load_openephys_file(data_directory,
+                                                filename,
+                                                Fs_openephys)
+            x_all.append(x)
+            if (last_t is not None) and not np.isclose(t, last_t).all():
+                raise RuntimeError("load_openephys_files: file timestamps don't match")
+            last_t = t
+
+        x_all = np.array(x_all)
+        return (x_all, t)
