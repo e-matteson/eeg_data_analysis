@@ -8,55 +8,55 @@ import matplotlib.pyplot as plt
 
 ###### LOADING / SAVING UTILITIES
 
-def load_eeg(data_directory, Fs_openephys, all_channels, recording_number=1):
-    return load_openephys_files('100_CH',data_directory, Fs_openephys, all_channels, recording_number)
+# def load_eeg(data_directory, Fs_openephys, all_channels, recording_number=1):
+#     return load_openephys_files('100_CH',data_directory, Fs_openephys, all_channels, recording_number)
 
-def load_analog_in(data_directory, Fs_openephys, all_channels, recording_number=1):
-    return load_openephys_files('100_ADC',data_directory, Fs_openephys, all_channels, recording_number)
+# def load_analog_in(data_directory, Fs_openephys, all_channels, recording_number=1):
+#     return load_openephys_files('100_ADC',data_directory, Fs_openephys, all_channels, recording_number)
 
-def load_openephys_files(prefix, data_directory, Fs_openephys, channel_names, recording_number=1):
-    x_all = []
-    last_t = None
-    t = None
-    # multiple recordings on the same day have _2, _3, ... in the file name
-    if recording_number == 1:
-        recording_number_str = ''
-    elif recording_number > 1:
-        recording_number_str = ('_%d' % recording_number)
-    else:
-        raise RuntimeError('load_openephys_files: invalid recording number')
+# def load_openephys_files(prefix, data_directory, Fs_openephys, channel_names, recording_number=1):
+#     x_all = []
+#     last_t = None
+#     t = None
+#     # multiple recordings on the same day have _2, _3, ... in the file name
+#     if recording_number == 1:
+#         recording_number_str = ''
+#     elif recording_number > 1:
+#         recording_number_str = ('_%d' % recording_number)
+#     else:
+#         raise RuntimeError('load_openephys_files: invalid recording number')
 
-    for chan_name in channel_names:
-        filename = ("%s%d%s.continuous" % (prefix, chan_name, recording_number_str))
-        (x, t) = load_openephys_file(data_directory,
-                                             filename,
-                                             Fs_openephys)
-        x_all.append(x)
-        if (last_t is not None) and not np.isclose(t, last_t).all():
-            raise RuntimeError("load_openephys_files: file timestamps don't match")
-        last_t = t
+#     for chan_name in channel_names:
+#         filename = ("%s%d%s.continuous" % (prefix, chan_name, recording_number_str))
+#         (x, t) = load_openephys_file(data_directory,
+#                                              filename,
+#                                              Fs_openephys)
+#         x_all.append(x)
+#         if (last_t is not None) and not np.isclose(t, last_t).all():
+#             raise RuntimeError("load_openephys_files: file timestamps don't match")
+#         last_t = t
 
-    x_all = np.array(x_all)
-    return (x_all, t)
+#     x_all = np.array(x_all)
+#     return (x_all, t)
 
-def load_openephys_file(folder, filename, Fs_openephys):
-    # always constant for openephys format, at least as of now
-    SAMPLES_PER_RECORD = 1024
-    all = ep.loadContinuous(os.path.join(folder, filename))
-    header = all['header']
-    sampleRate = int(header['sampleRate'])
-    if sampleRate != Fs_openephys:
-        raise RuntimeError('load_openephys_file: unexpected sample rate')
+# def load_openephys_file(folder, filename, Fs_openephys):
+#     # always constant for openephys format, at least as of now
+#     SAMPLES_PER_RECORD = 1024
+#     all = ep.loadContinuous(os.path.join(folder, filename))
+#     header = all['header']
+#     sampleRate = int(header['sampleRate'])
+#     if sampleRate != Fs_openephys:
+#         raise RuntimeError('load_openephys_file: unexpected sample rate')
 
-    x = all['data']
+#     x = all['data']
 
-    # get timestamps for each record
-    timestamps = all['timestamps']
-    # compute timestamps for each sample - I think this is the right way...
-    t = np.array([np.arange(time, time+1024) for time in timestamps]).flatten() / sampleRate
-    if not are_intervals_close(t, 1/sampleRate):
-        raise RuntimeError('load_openephys_file: timestamps may be wrong')
-    return (x,t)
+#     # get timestamps for each record
+#     timestamps = all['timestamps']
+#     # compute timestamps for each sample - I think this is the right way...
+#     t = np.array([np.arange(time, time+1024) for time in timestamps]).flatten() / sampleRate
+#     if not are_intervals_close(t, 1/sampleRate):
+#         raise RuntimeError('load_openephys_file: timestamps may be wrong')
+#     return (x,t)
 
 def save_wav(data, filename, volume=1):
     if volume > 1 or volume < 0:
