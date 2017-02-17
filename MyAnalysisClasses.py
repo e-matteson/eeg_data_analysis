@@ -9,7 +9,7 @@ from MyUtilities import *
 
 class OpenEphysWrapper:
     def __init__(self):
-        # I dunno
+        # should this do anying, I dunno
         pass
 
     def load_continuous(self, path, Fs_openephys):

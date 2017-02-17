@@ -1,0 +1,11 @@
+* EEG analysis tools
+Process and plot data recorded by the [[https://github.com/open-ephys/plugin-GUI][OpenEphys GUI]], and by our own data_acquisition_code tools.
+
+** requirements:
+python3
+scipy/numpy
+matplotlib
+
+It should probably work on any platform, but has only been tested on linux.
+
+# **
