@@ -62,6 +62,8 @@ class OpenEphysWrapper:
 
         return data
 
+
+
 class AnalogData:
 
     def __init__(self, x_all, t, original_Fs, channel_nums):
@@ -158,6 +160,24 @@ class AnalogData:
         for chan_index in range(self.count_channels()):
             self.x_all[chan_index, :] = lowpass(self.x_all[chan_index, :], cutoff, self.Fs)
 
+    def plot_channel(self, axes, channel_num, title='', plot_properties=None):
+        if plot_properties is None:
+            plot_properties = PlotProperties(xlabel="Time (s)", ylabel="Amplitude")
+        channel_index = self.channel_num_to_index(channel_num)
+        TimePlotter.plot_channel(axes, self.x_all[channel_index], self.t, plot_properties)
+
+class PlotProperties:
+    def __init__(self, title='', xlabel='', ylabel='', linestyle=None, marker=None,
+                 linewidth=1, xlim=None, ylim=None, color=None):
+        self.title = title
+        self.xlabel = xlabel
+        self.ylabel = ylabel
+        self.linewidth =linewidth
+        self.linestyle = linestyle
+        self.marker = marker
+        self.xlim = xlim
+        self.ylim = ylim
+        self.color = color
 
 class Session:
     # TODO add motion data class
@@ -207,6 +227,32 @@ class Session:
         make_directory(full_dir_path)
         fig.savefig(os.path.join(full_dir_path, filename))
 
+class TimePlotter:
+    # def __init__(self):
+
+    def plot_channel(axes, x, t, props):
+        """Plot one channel of data on the given axes. Specify channel by
+        name/number, not index! props is a PlotProperties object."""
+
+        # TODO setting somethings twice?
+        axes.plot(t[:len(x)], x, linestyle=props.linestyle, marker=props.marker,
+                  linewidth=props.linewidth, color=props.color)
+
+        if props.title is not None:
+            axes.set_title(props.title)
+        if props.xlabel is not None:
+            axes.set_xlabel(props.xlabel)
+        if props.ylabel is not None:
+            axes.set_ylabel(props.ylabel)
+
+        if props.marker is not None:
+            axes.set_marker(props.marker)
+        if props.ylim is not None:
+            axes.set_ylim(props.ylim)
+        if not props.xlim:
+            axes.set_xlim([np.min(t), np.max(t)])
+        else:
+            axes.set_xlim(props.xlim)
 
 class Spectrogram:
 
@@ -248,10 +294,11 @@ class Spectrogram:
         self.freq_bins = freq_bins
         self.time_bins = time_bins
 
-    def plot_channel(self, channel_num, axes, title='',colorbar=None, vmin=None, vmax=None):
+    def plot_channel(self, channel_num, axes, title='', colorbar=None, vmin=None, vmax=None):
         "Plot one channel of data on the given axes. Specify channel by name/number, not index!"
         # TODO implement
         # TODO what do vmin and vmax do? can they be automated?
+        # TODO use PlotProperties
         channel_index = self.data.channel_num_to_index(channel_num)
         im = axes.imshow(
             # TODO don't transpose anymore! update freq truncation too...
@@ -274,9 +321,7 @@ class Spectrogram:
         if colorbar is not None:
             plt.colorbar(im, ax=axes, orientation='horizontal').set_label(self.zlabel)
 
-
-
-    def calculate_1channel(self, data_channel):
+    def calculate_channel(self, data_channel):
         # this could be optimized by computing spectrograms for all channels at once
         # but that would make plotting more complicated
         # TODO what are the actual units of pxx?
