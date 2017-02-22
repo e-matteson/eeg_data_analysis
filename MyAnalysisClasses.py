@@ -5,6 +5,7 @@ import numpy as np
 import scipy.signal as sig
 import scipy.stats as stats
 import copy
+import json
 
 from MyUtilities import *
 
@@ -39,8 +40,6 @@ class OpenEphysWrapper:
         last_t = None
         t = None
         # multiple recordings on the same day have _2, _3, ... in the file name
-        print(channel_nums)
-        print(recording_num)
         if recording_num == 1:
             recording_number_str = ''
         elif recording_num > 1:
@@ -67,7 +66,7 @@ class OpenEphysWrapper:
 
 class AnalogData:
 
-    def __init__(self, x_all, t, original_Fs, channel_nums):
+    def __init__(self, x_all, t, original_Fs, channel_nums=None):
         # 2d numpy array, len(channel_nums) by len(t)
         self.x_all = x_all
 
@@ -83,7 +82,10 @@ class AnalogData:
 
         # List of channel numbers that match the numbers in open ephys file
         #  names. These are NOT indices into x_all.
-        self.channel_nums = channel_nums
+        if channel_nums is None:
+            self.channel_nums = range(x_all.shape[0])
+        else:
+            self.channel_nums = channel_nums
 
         # Create empty dictionary to store a record of preprocessing steps
         self.preprocess_config = {}
@@ -197,6 +199,7 @@ class AnalogData:
 class PlotProperties:
     def __init__(self, title='', xlabel='', ylabel='', linestyle=None, marker=None,
                  linewidth=1, xlim=None, ylim=None, color=None):
+        # TODO add legend, especially for MotionData
         self.title = title
         self.xlabel = xlabel
         self.ylabel = ylabel
@@ -208,8 +211,6 @@ class PlotProperties:
         self.color = color
 
 class Session:
-    # TODO add motion data class
-
     # Assume that every recording is in a separate directory, so we don't have
     # to keep track of the recording number appended to the end of the open
     # ephys filenames. This requires that you restart the open ephys GUI
@@ -228,10 +229,6 @@ class Session:
             # if a session name is not supplied, use the name of the data directory
             self.name = os.path.basename(directory.strip('/'))
 
-        # if eeg_data is not None:
-        #     self.eeg_data = eeg_data    # AnalogData object containing EEG data
-        # if sync_data is not None:
-        #     self.sync_data = sync_data  # AnalogData object containing sync pulses
         self.eeg_data = eeg_data    # AnalogData object containing EEG data
         self.sync_data = sync_data  # AnalogData object containing sync pulses
 
@@ -246,8 +243,30 @@ class Session:
         self.eeg_data = self.open_ephys.load_continuous_channels('100_CH', self.directory, self.Fs_openephys, channel_nums)
 
 
-    # def load_analog_in(data_directory, Fs_openephys, all_channels, recording_num=1):
-    #     return load_continuous_channels('100_ADC',data_directory, Fs_openephys, all_channels, recording_num)
+    def load_motion(self, motion_file, chunk_msb=None, chunk_lsb=None, enable=None):
+        # TODO organize this better
+        chunk_pins = self.open_ephys.load_continuous_channels('100_ADC', self.directory, self.Fs_openephys, [chunk_msb, chunk_lsb])
+        enable_pin = self.open_ephys.load_continuous_channels('100_ADC', self.directory, self.Fs_openephys, [enable])
+        enable_index = MotionLoader.find_enable_index(enable_pin)
+        print("enable time: %f" % chunk_pins.t[enable_index])
+
+        chunk_nums_array = MotionLoader.get_chunk_nums(msb=chunk_pins.x_all[0], lsb=chunk_pins.x_all[1])
+        (x_motion, samples_per_chunk) = MotionLoader.load_motion_file(self.directory, motion_file, num_sensors=3)
+
+        t_motion = MotionLoader.make_motion_timestamps(chunk_nums_array, chunk_pins.t, enable_index, samples_per_chunk)
+
+
+        sensors = []
+        for i in range(x_motion.shape[0]):
+            # TODO stop cutting off extra samples to make x_motion and t_motion the same size.
+            # Figure out how to make timestamps correctly instead!!!!
+            x = x_motion[i, :, :t_motion.shape[0]]
+
+            x = MotionLoader.unwrap_quat(x)
+            sensors.append(AnalogData(x, t_motion, self.Fs_openephys))
+
+        self.motion = MotionData(sensors=sensors)
+
 
     def save_fig(self, fig, figure_directory, filename):
         """Save the figure object as filename in session_directory/figure_directory"""
@@ -261,9 +280,18 @@ class TimePlotter:
     def plot_channel(x, t, axes, props):
         """Plot one channel of data on the given axes. Specify channel by
         name/number, not index! props is a PlotProperties object."""
+        # TODO is this the best way to re-use plot_all?
+        TimePlotter.plot_all(np.array([x]), t, axes, props)
 
+    def plot_all(x_all, t, axes, props):
+        """Plot all channel of data on the given axes. Specify channel by
+        name/number, not index! props is a PlotProperties object."""
+        # TODO add legend
         # TODO setting somethings twice?
-        axes.plot(t[:len(x)], x, linestyle=props.linestyle, marker=props.marker,
+        print(x_all.shape)
+        print(t.shape)
+        assert(t.shape[0] == x_all.shape[-1])
+        axes.plot(t, x_all.transpose(), linestyle=props.linestyle, marker=props.marker,
                   linewidth=props.linewidth, color=props.color)
 
         if props.title is not None:
@@ -384,3 +412,150 @@ class Spectrogram:
     #         pxx = 10*np.log10(pxx/self.config['log_ref'])
     #     pxx, freq_bins = truncate_by_value(pxx, freq_bins, freq_range)
     #     return (freq_bins, time_bins, pxx)
+
+class MotionData:
+    """A class for storing motion data recorded by the beaglebone / bno055 system"""
+    def __init__(self, sensors=None):
+         """sensors is a list of AnalogData objects containing motion samples from each sensor"""
+         # TODO consider storing sensors in dictionary
+         # TODO consider storing other things, like enable index
+         self.sensors=sensors
+
+    def plot_sensor(self, sensor_index, axes, plot_properties=None):
+        # print(self.sensors[0])
+        # print(self.sensors[0].x_all)
+        # exit(3)
+        x_all = self.sensors[sensor_index].x_all
+        t = self.sensors[sensor_index].t
+        if plot_properties is None:
+            plot_properties = PlotProperties(xlabel="Time (s)", ylabel="Orientation (quaternion)",
+                                             title="Motion Sensor %d" % sensor_index)
+        print("plotting sensor...")
+        TimePlotter.plot_all(x_all, t, axes, plot_properties)
+
+
+class MotionLoader:
+
+    def get_chunk_nums(msb=None, lsb=None):
+        # "static" function
+        # chunk_pins is an AnalogData object. MSB pin must be first, LSB pin must be second.
+        voltage_threshold = 2.0
+        min_samples_per_chunk = 10
+        # check dimensions
+
+        assert(len(msb.shape) == 1)
+        assert(len(lsb.shape) == 1)
+        assert(lsb.size == msb.size )
+
+        # threshold the analog recordings
+        msb = threshold_01(msb, voltage_threshold)
+        lsb = threshold_01(lsb, voltage_threshold)
+
+        # Calculate the chunk nums encoded by the pins
+        chunk_nums = 2*msb + lsb
+
+        # Debounce, because the 2 chunk pins don't change simultaneously, and
+        #  sometimes the sample falls between the 2 change times.
+        chunk_nums = debounce_discrete_signal(chunk_nums, min_samples_per_chunk)
+        return chunk_nums
+
+    def load_motion_file(directory, filename, num_sensors=None):
+        """Return 3 4xN arrays, with quaternion data for each sensor."""
+        sample_dict_list = []
+        with open(os.path.join(directory, filename), 'r') as f:
+            for line in f:
+                if line.strip()[0] != '#': # not a comment
+                    sample_dict_list.append(json.loads(line))
+
+        if num_sensors is not None:
+            if len(sample_dict_list[0]['data']) != num_sensors:
+                raise RuntimeError("Expected %d motion sensors" % num_sensors)
+        else:
+            num_sensors = len(sample_dict_list[0]['data'])
+
+        # find samples per chunk, by checking the sample num before a zero
+        for i in range(1, len(sample_dict_list)):
+            if int(sample_dict_list[i]['sample']) == 0:
+                samples_per_chunk = 1+int(sample_dict_list[i-1]['sample'])
+                break
+
+        # print(sample_dict_list[0])
+        x_motion = []
+        for s in range(num_sensors):
+            x_motion.append(MotionLoader.get_motion_values(sample_dict_list, s))
+        x_motion = np.array(x_motion)
+        # print(x_motion)
+        return (x_motion, samples_per_chunk)
+        # return x_motion
+
+    def get_motion_values(sample_dict_list, sensor_num):
+        """Extract quaternion data for 1 sensor, converting hex strings to ints.
+        Return 4xN array."""
+        # get hex string data for sensor
+        x = [d['data'][sensor_num] for d in sample_dict_list]
+        # convert hex string to int
+        x = [[int(hex_val, 16) for hex_val in sample] for sample in x]
+        # convert to numpy array, reshape so quaternion arrays are in first dimension
+        x = np.transpose(np.array(x))
+        return x
+
+    def make_motion_timestamps(chunk_nums, t_chunk, enable_index, samples_per_chunk):
+        """The motion sample rate is irregular! Return irregular timestamps.
+        Assume samples are evenly spaced within each chunk."""
+        # TODO rewrite docstring
+        # TODO will this always behave at the end of a file?
+        # TODO is this the best way to extract the timestamps?
+
+        # find the start of each chunk
+        chunk_start_indices = []
+        for index in range(enable_index, len(t_chunk)):
+            # TODO off-by-1?
+            if chunk_nums[index] != chunk_nums[index-1]:
+                chunk_start_indices.append(index)
+
+        # make evenly spaced sample timestamps within each chunk
+        sample_indices = []
+        for c in range(len(chunk_start_indices)-1):
+            start = chunk_start_indices[c]
+            end = chunk_start_indices[c+1]
+            interval = (end - start)*1.0/samples_per_chunk
+            sample_indices.append(np.arange(start, end, interval))
+
+        # convert from indices to seconds
+        sample_indices = np.array(sample_indices, dtype=np.int32).flatten()
+        t_motion = t_chunk[sample_indices]
+
+        # if len(t_motion) != x_motion.shape[1]:
+        #     raise RuntimeError('Something is very wrong')
+        return t_motion
+
+
+    def find_enable_index(enable_pin):
+        """Take enable pin recording as AnalogData object, return the index of the first time it goes high"""
+        # TODO check if it is enabled and disabled multiple times
+        x = enable_pin.x_all[0]
+        x = threshold_01(x, 0.5)
+        # print(x)
+        for index in range(1, x.shape[0]):
+            if x[index-1] == 0 and x[index] == 1:
+                # success
+                print ("found enable index: %d" % index)
+                return index
+        # fail
+        raise RuntimeError("Failed to find 'enable index'")
+
+    def unwrap_quat(x_motion, range_size=2**16):
+        """ Remove discontinuities from quaternion data, by letting values go above and below the range."""
+        # TODO I don't know how quaternions are supposed to work, is this valid?
+        max_jump_size = range_size/2.0
+        x_motion_copy = x_motion.copy()
+        for d in range(x_motion_copy.shape[0]): # for w,x,y,z
+            for i in range(1, x_motion_copy.shape[1]): # for each sample
+                jump = (x_motion_copy[d][i] - x_motion_copy[d][i-1])
+                if jump > max_jump_size:
+                    # huge jump up, shift back down
+                    x_motion_copy[d][i] -= range_size
+                elif jump < -max_jump_size:
+                    # huge jump down, shift back up
+                    x_motion_copy[d][i] += range_size
+        return x_motion_copy

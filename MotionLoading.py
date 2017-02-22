@@ -40,16 +40,6 @@ def find_enable_index(x_chunk):
     # fail
     return -1
 
-def get_motion_values(sample_dict_list, sensor_num):
-    """Extract quaternion data for 1 sensor, converting hex strings to ints.
-    Return 4xN array."""
-    # get hex string data for sensor
-    x_motion = [d['data'][sensor_num] for d in sample_dict_list]
-    # convert hex string to int
-    x_motion = [[int(hex_val, 16) for hex_val in sample] for sample in x_motion]
-    # convert to numpy array, reshape so quaternion arrays are in first dimension
-    x_motion = np.transpose(np.array(x_motion))
-    return x_motion
 
 def make_motion_timestamps(x_chunk, t_chunk, enable_index, samples_per_chunk):
     """The motion sample rate is irregular! Return irregular timestamps.

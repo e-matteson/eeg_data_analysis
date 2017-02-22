@@ -78,7 +78,7 @@ def normalize(x):
     return x/x.max()
 
 def threshold_01(x, threshold):
-    hi_indices = x > threshold
+    hi_indices = x >= threshold
     x_new = np.zeros(x.shape)
     x_new[hi_indices] = 1
     return x_new
@@ -115,21 +115,21 @@ def moving_RMS(x, window_len):
     window = sig.hamming(window_len)
     return np.sqrt(np.convolve(np.power(x,2),window,'same'))
 
-def unwrap_quat(x_motion, range_size=2**16):
-    """ Remove discontinuities from quaternion data, by letting values go above and below the range."""
-    # I don't know how quaternions are supposed to work, is this valid?
-    max_jump_size = range_size/2.0
-    x_motion_copy = x_motion.copy()
-    for d in range(x_motion_copy.shape[0]): # for w,x,y,z
-        for i in range(1, x_motion_copy.shape[1]): # for each sample
-            jump = (x_motion_copy[d][i] - x_motion_copy[d][i-1])
-            if jump > max_jump_size:
-                # huge jump up, shift back down
-                x_motion_copy[d][i] -= range_size
-            elif jump < -max_jump_size:
-                # huge jump down, shift back up
-                x_motion_copy[d][i] += range_size
-    return x_motion_copy
+# def unwrap_quat(x_motion, range_size=2**16):
+#     """ Remove discontinuities from quaternion data, by letting values go above and below the range."""
+#     # I don't know how quaternions are supposed to work, is this valid?
+#     max_jump_size = range_size/2.0
+#     x_motion_copy = x_motion.copy()
+#     for d in range(x_motion_copy.shape[0]): # for w,x,y,z
+#         for i in range(1, x_motion_copy.shape[1]): # for each sample
+#             jump = (x_motion_copy[d][i] - x_motion_copy[d][i-1])
+#             if jump > max_jump_size:
+#                 # huge jump up, shift back down
+#                 x_motion_copy[d][i] -= range_size
+#             elif jump < -max_jump_size:
+#                 # huge jump down, shift back up
+#                 x_motion_copy[d][i] += range_size
+#     return x_motion_copy
 
 def toDecibels(x, x_ref):
     # x is 1d np array, x_ref is scalar (or same dim array?)
@@ -174,7 +174,7 @@ def truncate_by_value(x, t, t_range, dim=None):
 
     if t_range is None:
         return (x,t)
-    if t_range[1] <= t_range[0]:
+    if t_range[1] <= t_range[0] or t_range[1] > t[-1]:
         raise RuntimeError('Invalid time range')
 
     index_range = [0, t.shape[-1]-1]

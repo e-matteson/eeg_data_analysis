@@ -33,29 +33,47 @@ def test():
 
 def main():
 
-    # test()
-    t = np.array(range(1,10))
-    x = np.array([[t, t*2, t*3],
-                  [t*4, t*5, t*6],
-                  [t*7, t*8, t*9]])
-    # x = x.transpose()
-    # t=np.array([1,2,3])
-    print (x)
-    print (t)
-    print(truncate_by_value(x, t, [1.5, 4.1]))
+    # # # # test()
+    # fig = plt.figure()
+    # axes = fig.gca()
+    # plot_props = PlotProperties(title='its a plot!', xlabel='im a x-axis')
+    # t = np.array(range(1,10))
+    # x = np.array([t*7, t*8, t*9])
+    # # data = AnalogData(x, t, 1)
 
-    exit(3)
+    # print(x)
+    # print(t)
+    # TimePlotter.plot_channel(x[0], t, axes, plot_props)
+    # plt.show()
+
+    # exit(4)
+    # # x = np.array([[0.1, 0.9, 0.2, 0.8, 0.3, 0.7, 0.4, 0.6, 0.5],
+    # #               [0.1, 0.9, 0.2, 0.8, 0.3, 0.7, 0.4, 0.6, 0.5] ])
+    # # print(threshold_01(x, 0.5))
+    # # # x = x.transpose()
+    # # # t=np.array([1,2,3])
+    # # print (x)
+    # # print (t)
+    # # print(truncate_by_value(x, t, [1.5, 4.1]))
+
+    fig = plt.figure()
+    axes = fig.gca()
+    plot_props = PlotProperties(title='its a plot!', xlabel='im a x-axis')
 
     session = Session("/home/em/data/eeg_tests/2017-01-30/2017-01-30_19-17-10")
 
-    session.load_eeg(range(1,3))
+    # session.load_eeg(range(1,3))
+
+    # foo = session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7)
+    session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
+    session.motion.plot_sensor(0, axes)
+    plt.show()
+
+    exit(5)
     print(session.eeg_data.x_all.shape)
     # data1 = session.eeg_data.copy(index_range=[0, 10*session.eeg_data.Fs])
     data1 = session.eeg_data
     data1.preprocess(downsample_factor=75, lowpass_cutoff=70)
-    fig = plt.figure()
-    axes = fig.gca()
-    plot_props = PlotProperties(title='its a plot!', xlabel='im a x-axis')
     data1.plot_channel(1, axes)
     spectrum1 = Spectrogram(data1)
     spectrum1.calculate_all()
