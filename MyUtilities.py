@@ -168,61 +168,82 @@ def debounce_discrete_signal(x, min_samples_per_chunk):
 #     yaw   = math.atan2(2*(w*z + x*y), 1-2*(y**2 + z**2))
 #     return [roll, pitch, yaw]
 
-def truncate_to_range(x, t, t_range):
-    # TODO test!
-    # TODO deal with diff x shapes
-    # x and t are numpy arrays
-    # print (t_range)
+def truncate_by_value(x, t, t_range, dim=None):
+    """Return copies of x and t truncated to approximately the given time range. x and t are numpy arrays, t_range is a list containing the start and end times in seconds. t must be a 1d array with the same length as dimension dim of x. If dim is None, the last dimension will be used."""
+    # The time range should be considered approximate. Expect off-by-1 errors.
 
     if t_range is None:
         return (x,t)
+    if t_range[1] <= t_range[0]:
+        raise RuntimeError('Invalid time range')
+
+    index_range = [0, t.shape[-1]-1]
+    if t_range[0] > t[0]:
+        index_range[0] = np.argmax(t>t_range[0])
+    if t_range[1] < t[-1]:
+        index_range[1] = np.argmax(t>t_range[1])
+
+    return truncate_by_index(x, t, index_range, dim=dim)
+
+
+def truncate_by_index(x, t, index_range, dim=None):
+    """Return copies of x and t truncated to the given range of samples. x and t
+    are numpy arrays, index_range is a list containing the start index (inclusive)
+    and end index (exclusive). If index_range contains floats, they will be rounded
+    down to ints. t must be a 1d array with the same length as dimension dim of x.
+    If dim is None, the last dimension will be used."""
+    # t must be a 1-dimensional array
+    assert(len(t.shape) == 1)
+    index_range = [int(index_range[0]), int(index_range[1])]
+    if index_range is None:
+        return (x,t)
+    if (index_range[0] < 0 or index_range[1] > t.shape[0] or index_range[0] > index_range[1]):
+        raise RuntimeError('truncate_by_index: invalid range indices: [%d,%d]' % (index_range[0], index_range[1]))
 
     new_x = x.copy()
     new_t = t.copy()
-    range_indices = [0, t.shape[-1]-1]
-    if t_range[0] > t[0]:
-        range_indices[0] = np.argmax(t>t_range[0])
-    if t_range[1] < t[-1]:
-        range_indices[1] = np.argmax(t>t_range[1])
 
-    if len(new_x.shape) == 2:
-        # print("****")
-        # print(new_x.shape)
-        # print(new_t.shape)
-        assert new_x.shape[1] == new_t.shape[0]
-        new_x = new_x[:, range_indices[0]:range_indices[1]]
-    elif len(new_x.shape) == 1:
-        # print(new_x.shape)
-        # print(new_t.shape)
+    if len(new_x.shape) == 1:
+        # x is a 1-dimensional array
         assert new_x.shape[0] == new_t.shape[0]
-        new_x = new_x[range_indices[0]:range_indices[1]]
+        new_x = new_x[index_range[0]:index_range[1]]
+    # elif len(new_x.shape) == 2:
     else:
-        raise RuntimeError('truncate_to_range: x must be have shape (T) or (N,T)')
+        # x is a multidimensional array, figure out which dimension to use
+        last_dim = len(new_x.shape) - 1
+        if dim is None:
+            # use the last dimension by default
+            dim = last_dim
+        assert new_x.shape[dim] == new_t.shape[0]
+        dims_before = dim
+        dims_after = (last_dim - dim)
+        indices = [slice(None)]*dims_before + [slice(index_range[0], index_range[1])] + [slice(None)]*dims_after
+        new_x = new_x[indices]
 
-    new_t = new_t[range_indices[0]:range_indices[1]]
+    new_t = new_t[index_range[0]:index_range[1]]
     return (new_x, new_t)
 
-def calc_spectrogram(data, Fs, freq_range=None, log=True, log_ref=1):
-    # this could be optimized by computing spectrograms for all channels at once
-    # but that would make plotting more complicated
-    # TODO what are the actual units of Pxx?
-    # is the 10*log10 the right way to get dB?
+# def calc_spectrogram(data, Fs, freq_range=None, log=True, log_ref=1):
+#     # this could be optimized by computing spectrograms for all channels at once
+#     # but that would make plotting more complicated
+#     # TODO what are the actual units of Pxx?
+#     # is the 10*log10 the right way to get dB?
 
-    # resolution = 1024
-    resolution = 256
-    (freq_bins, time_bins, Pxx) = sig.spectrogram(
-        data, fs=Fs,
-        nperseg=resolution,
-        noverlap=int(resolution/2),
-        mode='psd',
-        scaling= 'density')
-    # print(time_bins)
-    # exit(3)
-    Pxx = Pxx.transpose()
-    if log:
-        Pxx = 10*np.log10(Pxx/log_ref)
-    Pxx, freq_bins = truncate_to_range(Pxx, freq_bins, freq_range)
-    return (freq_bins, time_bins, Pxx)
+#     # resolution = 1024
+#     resolution = 256
+#     (freq_bins, time_bins, Pxx) = sig.spectrogram(
+#         data, fs=Fs,
+#         nperseg=resolution,
+#         noverlap=int(resolution/2),
+#         mode='psd',
+#         scaling= 'density')
+#     # print(time_bins)
+#     # exit(3)
+#     Pxx = Pxx.transpose()
+#     if log:
+#         Pxx = 10*np.log10(Pxx/log_ref)
+#     Pxx, freq_bins = truncate_by_value(Pxx, freq_bins, freq_range)
+#     return (freq_bins, time_bins, Pxx)
 
 
 

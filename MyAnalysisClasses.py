@@ -4,6 +4,7 @@ import OpenEphys as ope
 import numpy as np
 import scipy.signal as sig
 import scipy.stats as stats
+import copy
 
 from MyUtilities import *
 
@@ -91,6 +92,26 @@ class AnalogData:
         string = "<AnalogData: %s, [%0.2f ... %0.2f], %s>" % (self.channel_nums, self.t[0], self.t[-1], self.Fs)
         return string
 
+    def copy(self, time_range=None, index_range=None):
+        """Return a new analogData object with a copy of everything in this one. Optionally truncate the data of the new copy."""
+        # TODO There's a whole lot of inefficient copying going on here.
+        # Ideas: - make truncate functions modify data instead of copying it
+        #        - only copy the requested range from the old AnalogData.
+        new = copy.deepcopy(self)
+
+        if time_range is not None and index_range is not None:
+            raise RuntimeError('You may not supply both time_range and index_range')
+
+        if time_range is not None:
+            new.truncate_value(time_range)
+        elif index_range is not None:
+            new.truncate_index(index_range)
+        return new
+
+    def length(self):
+        assert(self.t.shape[0] == self.x_all.shape[1])
+        return self.t.shape[0]
+
     def count_channels(self):
         """Return the number of channels of data"""
         count = len(self.channel_nums)
@@ -160,11 +181,18 @@ class AnalogData:
         for chan_index in range(self.count_channels()):
             self.x_all[chan_index, :] = lowpass(self.x_all[chan_index, :], cutoff, self.Fs)
 
-    def plot_channel(self, axes, channel_num, title='', plot_properties=None):
+    def plot_channel(self, channel_num, axes, title='', plot_properties=None):
         if plot_properties is None:
             plot_properties = PlotProperties(xlabel="Time (s)", ylabel="Amplitude")
         channel_index = self.channel_num_to_index(channel_num)
-        TimePlotter.plot_channel(axes, self.x_all[channel_index], self.t, plot_properties)
+        TimePlotter.plot_channel(self.x_all[channel_index], self.t, axes, plot_properties)
+
+    def truncate_value(self, time_range):
+        (self.x_all, self.t) = truncate_by_value(self.x_all, self.t, time_range)
+
+    def truncate_index(self, index_range):
+        (self.x_all, self.t) = truncate_by_index(self.x_all, self.t, index_range)
+
 
 class PlotProperties:
     def __init__(self, title='', xlabel='', ylabel='', linestyle=None, marker=None,
@@ -230,7 +258,7 @@ class Session:
 class TimePlotter:
     # def __init__(self):
 
-    def plot_channel(axes, x, t, props):
+    def plot_channel(x, t, axes, props):
         """Plot one channel of data on the given axes. Specify channel by
         name/number, not index! props is a PlotProperties object."""
 
@@ -273,6 +301,7 @@ class Spectrogram:
 
 
     def calculate_all(self):
+        # TODO check if this is all right, after switching from 1 channel to all channels.
         (freq_bins, time_bins, pxx_all) = sig.spectrogram(
             self.data.x_all, fs=self.data.Fs,
             nperseg=self.config['resolution'],
@@ -288,24 +317,36 @@ class Spectrogram:
         print(pxx_all.shape)
         if self.config['log']:
             pxx_all = 10*np.log10(pxx_all/self.config['log_ref'])
-        pxx_all, freq_bins = truncate_to_range(pxx_all, freq_bins, self.config['freq_range'])
+        pxx_all, freq_bins = truncate_by_value(pxx_all, freq_bins, self.config['freq_range'])
+        print(time_bins.shape)
+        print(pxx_all.shape)
 
+        exit(2)
         self.pxx_all = pxx_all
         self.freq_bins = freq_bins
         self.time_bins = time_bins
 
-    def plot_channel(self, channel_num, axes, title='', colorbar=None, vmin=None, vmax=None):
-        "Plot one channel of data on the given axes. Specify channel by name/number, not index!"
+    def plot_channel(self, channel_num, axes, title='', colorbar=None, vmin=None, vmax=None, time_range=None):
+        "Plot the spectrogram of one channel on the given axes. Specify channel by name/number, not index!"
         # TODO implement
         # TODO what do vmin and vmax do? can they be automated?
         # TODO use PlotProperties
         channel_index = self.data.channel_num_to_index(channel_num)
+
+        pxx = self.pxx_all[channel_index]
+        print(self.pxx_all.shape)
+        print(pxx.shape)
+        exit(3)
+        time_bins = self.time_bins
+        if time_range is not None:
+            (pxx, time_bins) = truncate_by_value(pxx, time_bins, time_range)
+
         im = axes.imshow(
-            # TODO don't transpose anymore! update freq truncation too...
-            self.pxx_all[channel_index].transpose(),
+            # TODO don't transpose anymore? update freq truncation too...
+            pxx.transpose(),
             origin="lower",
             aspect="auto",
-            extent=[self.time_bins[0], self.time_bins[-1], self.freq_bins[0], self.freq_bins[-1]],
+            extent=[time_bins[0], time_bins[-1], freq_bins[0], self.freq_bins[-1]],
             cmap=plt.cm.gist_heat,
             interpolation="none",
             vmin=vmin,
@@ -321,23 +362,25 @@ class Spectrogram:
         if colorbar is not None:
             plt.colorbar(im, ax=axes, orientation='horizontal').set_label(self.zlabel)
 
-    def calculate_channel(self, data_channel):
-        # this could be optimized by computing spectrograms for all channels at once
-        # but that would make plotting more complicated
-        # TODO what are the actual units of pxx?
-        # is the 10*log10 the right way to get dB?
+    # def calculate_channel(self, data_channel):
+    #     # this could be optimized by computing spectrograms for all channels at once
+    #     # but that would make plotting more complicated
+    #     # TODO what are the actual units of pxx?
+    #     # is the 10*log10 the right way to get dB?
 
-        # resolution = 1024
-        (freq_bins, time_bins, pxx) = sig.spectrogram(
-            data, fs=Fs,
-            nperseg=self.config['resolution'],
-            noverlap=int(self.config['resolution']/2),
-            mode='psd',
-            scaling= 'density')
-        # print(time_bins)
-        # exit(3)
-        pxx = pxx.transpose()
-        if self.config['log']:
-            pxx = 10*np.log10(pxx/self.config['log_ref'])
-        pxx, freq_bins = truncate_to_range(pxx, freq_bins, freq_range)
-        return (freq_bins, time_bins, pxx)
+    #     # resolution = 1024
+    #     # data =
+    #     # channel_index = self.data.channel_num_to_index(channel_num)
+    #     (freq_bins, time_bins, pxx) = sig.spectrogram(
+    #         data, fs=Fs,
+    #         nperseg=self.config['resolution'],
+    #         noverlap=int(self.config['resolution']/2),
+    #         mode='psd',
+    #         scaling= 'density')
+    #     # print(time_bins)
+    #     # exit(3)
+    #     pxx = pxx.transpose()
+    #     if self.config['log']:
+    #         pxx = 10*np.log10(pxx/self.config['log_ref'])
+    #     pxx, freq_bins = truncate_by_value(pxx, freq_bins, freq_range)
+    #     return (freq_bins, time_bins, pxx)
