@@ -220,7 +220,7 @@ class Session:
     Fs_openephys = 30000
     open_ephys = OpenEphysWrapper()
 
-    def __init__(self, directory, name=None, eeg_data=None, sync_data=None):
+    def __init__(self, directory, name=None, eeg_data=None):
         self.directory = directory # path of directory containing data files
 
         if name is not None:
@@ -230,7 +230,7 @@ class Session:
             self.name = os.path.basename(directory.strip('/'))
 
         self.eeg_data = eeg_data    # AnalogData object containing EEG data
-        self.sync_data = sync_data  # AnalogData object containing sync pulses
+        self.motion = None          # MotionData object
 
     def __str__(self):
         string = "<Session: %s, %s, %s>" % (self.name, self.eeg_data, self.sync_data)
@@ -421,10 +421,18 @@ class MotionData:
          # TODO consider storing other things, like enable index
          self.sensors=sensors
 
+    def num_sensors():
+        return len(self.sensors)
+
+    # def preprocess():
+    #     for i in range(num_sensors):
+    #         self.sensors[i] =
+    #         # subplot_axes  = fig.add_subplot(1,3,i+1)
+    #         sensor = session.motion.sensors[i]
+    #         # subplot_axes.plot(sensor.t, sensor.x_all.transpose())
+    #         session.motion.plot_sensor(i, subplot_axes)
+
     def plot_sensor(self, sensor_index, axes, plot_properties=None):
-        # print(self.sensors[0])
-        # print(self.sensors[0].x_all)
-        # exit(3)
         x_all = self.sensors[sensor_index].x_all
         t = self.sensors[sensor_index].t
         if plot_properties is None:
@@ -432,6 +440,7 @@ class MotionData:
                                              title="Motion Sensor %d" % sensor_index)
         print("plotting sensor...")
         TimePlotter.plot_all(x_all, t, axes, plot_properties)
+
 
 
 class MotionLoader:

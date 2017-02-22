@@ -31,30 +31,54 @@ def test():
     # spec.plot_channel(1, axes)
     plt.show()
 
+
+def test2():
+    # # # test()
+    fig = plt.figure()
+    axes = fig.gca()
+    plot_props = PlotProperties(title='its a plot!', xlabel='im a x-axis')
+    t = np.array(range(1,10))
+    x = np.array([t*7, t*8, t*9])
+    # data = AnalogData(x, t, 1)
+
+    print(x)
+    print(t)
+    TimePlotter.plot_channel(x[0], t, axes, plot_props)
+    plt.show()
+
+    exit(4)
+    # x = np.array([[0.1, 0.9, 0.2, 0.8, 0.3, 0.7, 0.4, 0.6, 0.5],
+    #               [0.1, 0.9, 0.2, 0.8, 0.3, 0.7, 0.4, 0.6, 0.5] ])
+    # print(threshold_01(x, 0.5))
+    # # x = x.transpose()
+    # # t=np.array([1,2,3])
+    # print (x)
+    # print (t)
+    # print(truncate_by_value(x, t, [1.5, 4.1]))
+
+
+
+def get_manual_onset_indices(motion_data):
+    """For session '/home/em/data/eeg_tests/2017-01-30/2017-01-30_19-17-10' """
+
+    # times = [63.2, 72.5, 93.2, 103.6, 123.4, 133.5, 153.1, 163.25, 183.15, 193.1,
+    #          213.3, 224.7, 243.7, 253.7, 273.1, 283.9, 303.3, 313.6, 333.6,
+    #          343.8, 363.55, 373.7, 393.5, 407.05, 423.35, 433.3, 453.3, 463.65,
+    #          483.5, 493.5, 513.6, 523.55, 543.65, 554.0, 573.5, 583.65, 603.7,
+    #          613.3]
+    # x = motion_data.sensors[0].x_all[0]
+    # t = motion_data.sensors[0].t
+    # indices = [get_index_of_value(t, time) for time in times]
+    # print(times)
+    # print([t[i] for i in indices])
+    indices = [5715, 6645, 8715, 9755, 11736, 12746, 14706, 15721, 17711, 18706,
+               20726, 21866, 23766, 24766, 26706, 27786, 29726, 30756, 32757,
+               33777, 35752, 36767, 38747, 40102, 41732, 42727, 44727, 45762,
+               47747, 48747, 50757, 51753, 53763, 54798, 56748, 57763, 59768,
+               60728]
+    return indices
+
 def main():
-
-    # # # # test()
-    # fig = plt.figure()
-    # axes = fig.gca()
-    # plot_props = PlotProperties(title='its a plot!', xlabel='im a x-axis')
-    # t = np.array(range(1,10))
-    # x = np.array([t*7, t*8, t*9])
-    # # data = AnalogData(x, t, 1)
-
-    # print(x)
-    # print(t)
-    # TimePlotter.plot_channel(x[0], t, axes, plot_props)
-    # plt.show()
-
-    # exit(4)
-    # # x = np.array([[0.1, 0.9, 0.2, 0.8, 0.3, 0.7, 0.4, 0.6, 0.5],
-    # #               [0.1, 0.9, 0.2, 0.8, 0.3, 0.7, 0.4, 0.6, 0.5] ])
-    # # print(threshold_01(x, 0.5))
-    # # # x = x.transpose()
-    # # # t=np.array([1,2,3])
-    # # print (x)
-    # # print (t)
-    # # print(truncate_by_value(x, t, [1.5, 4.1]))
 
     fig = plt.figure()
     axes = fig.gca()
@@ -65,10 +89,24 @@ def main():
     # session.load_eeg(range(1,3))
 
     # foo = session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7)
-    session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
-    session.motion.plot_sensor(0, axes)
-    plt.show()
+    # session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
 
+    onsets = get_manual_onset_indices(session.motion)
+    print(onsets)
+
+    # session.motion.plot_sensor(0, axes)
+    # for i in range(3):
+    #     subplot_axes  = fig.add_subplot(1,3,i+1)
+    #     sensor = session.motion.sensors[i]
+    #     # subplot_axes.plot(sensor.t, sensor.x_all.transpose())
+    #     session.motion.plot_sensor(i, subplot_axes)
+    #     # for q in range(4):
+    #     #     grad = np.gradient(sensor.x_all[q])
+    #     #     print(grad)
+    #     #     subplot_axes.plot(sensor.t, grad)
+
+
+    # plt.show()
     exit(5)
     print(session.eeg_data.x_all.shape)
     # data1 = session.eeg_data.copy(index_range=[0, 10*session.eeg_data.Fs])

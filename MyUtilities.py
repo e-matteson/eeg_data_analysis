@@ -321,3 +321,6 @@ def plot_time(axes, data, t, title='', xlabel='Time (s)', ylabel='Amplitude',
     if ylim is not None:
         axes.set_ylim(ylim)
 
+def get_index_of_value(array, value):
+    index = np.argmax(array>value)
+    return index
