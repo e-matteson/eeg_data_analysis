@@ -202,7 +202,6 @@ class AnalogData:
         (self.x_all, self.t) = truncate_by_index(self.x_all, self.t, index_range)
 
     def get_intervals(self, channel_num, onset_times, interval_times):
-        """Return """
         x_onsets = []
         t_onset = None
         channel_index = self.channel_num_to_index(channel_num)
@@ -348,13 +347,19 @@ class TimePlotter:
 
 class Spectrogram:
 
-    def __init__(self, analogData, resolution=256, freq_range=None, log=True, log_ref=1):
+    def __init__(self, analogData=None, pxx_all=None, freq_bins=None, time_bins=None, resolution=256, freq_range=None, log=True, log_ref=1):
+        # you must either supply raw analogData, OR previously calculated pxx_all, freq_bins, and time_bins
+        self.data = analogData
+
+        self.pxx_all = pxx_all
+        self.freq_bins = freq_bins
+        self.time_bins = time_bins
+
         self.config = {}
         self.config['resolution'] = resolution
         self.config['freq_range'] = freq_range
         self.config['log'] = log
         self.config['log_ref'] = log_ref
-        self.data = analogData
 
         self.xlabel='Time (s)'
         self.ylabel='Frequency (Hz)'
@@ -363,9 +368,45 @@ class Spectrogram:
         else:
             self.zlabel='PSD'
 
+    def get_intervals(self, channel_num, onset_times, interval_times):
+        # TODO combine with AnalogData.get_intervals()
+        pxx_onsets = []
+        t_onset = None
+        channel_index = self.data.channel_num_to_index(channel_num)
+        interval_times = np.array(interval_times)
+        for onset in onset_times:
+            time_range = interval_times + onset
+            (pxx_interval, t_interval) = truncate_by_value(self.pxx_all[channel_index], self.time_bins, time_range, dim=0)
+            # print("***")
+            # print(self.pxx_all.shape)
+            # print(self.time_bins.shape)
+            # print(self.freq_bins.shape)
+            # print(pxx_interval.shape)
+            # print(t_interval.shape)
+            gc.collect() # force garbage collection, or we'll run out of memory
+            new_t_onset = t_interval - onset
+            if t_onset is None:
+                t_onset = new_t_onset
+            # TODO times are not always consistent! pretend they're the same for now
+            # elif not np.isclose(t_onset, new_t_onset).all():
+            #     print(np.array(t_onset))
+            #     print(np.array(new_t_onset))
+            #     raise RuntimeError("onset time arrays are inconsistent")
+
+            # TODO just get rid of any extra time samples, this terrible and
+            #  brittle and assumes the first t_onset is the shortest one.
+            pxx_onsets.append(pxx_interval[:t_onset.shape[0], :])
+
+        pxx_onsets = np.array(pxx_onsets)
+        t_onset = np.array(t_onset)
+        onsets = Spectrogram(pxx_all=pxx_onsets, time_bins=t_onset, freq_bins=self.freq_bins)
+        # print(pxx_onsets.shape)
+        # print(t_onset)
+        return onsets
 
     def calculate_all(self):
         # TODO check if this is all right, after switching from 1 channel to all channels.
+        gc.collect()
         (freq_bins, time_bins, pxx_all) = sig.spectrogram(
             self.data.x_all, fs=self.data.Fs,
             nperseg=self.config['resolution'],
@@ -373,44 +414,46 @@ class Spectrogram:
             mode='psd',
             scaling= 'density',
             axis=-1)
-        # print(time_bins)
-        # exit(3)
-        print(time_bins.shape)
-        print(pxx_all.shape)
+        # print(time_bins.shape)
+        # print(pxx_all.shape)
         pxx_all = pxx_all.transpose((0,2,1))
-        print(pxx_all.shape)
+        # print(pxx_all.shape)
         if self.config['log']:
             pxx_all = 10*np.log10(pxx_all/self.config['log_ref'])
         pxx_all, freq_bins = truncate_by_value(pxx_all, freq_bins, self.config['freq_range'])
-        print(time_bins.shape)
-        print(pxx_all.shape)
+        # print(time_bins.shape)
+        # print(pxx_all.shape)
 
-        exit(2)
         self.pxx_all = pxx_all
         self.freq_bins = freq_bins
         self.time_bins = time_bins
 
-    def plot_channel(self, channel_num, axes, title='', colorbar=None, vmin=None, vmax=None, time_range=None):
+    def plot_channel(self, num=None, index=None, axes=None, title='',
+                     colorbar=None, vmin=None, vmax=None, time_range=None,
+                     freq_range=None):
         "Plot the spectrogram of one channel on the given axes. Specify channel by name/number, not index!"
         # TODO implement
         # TODO what do vmin and vmax do? can they be automated?
         # TODO use PlotProperties
-        channel_index = self.data.channel_num_to_index(channel_num)
+        assert(axes is not None)
 
-        pxx = self.pxx_all[channel_index]
-        print(self.pxx_all.shape)
-        print(pxx.shape)
-        exit(3)
+        if index is None:
+            index = self.data.channel_num_to_index(num)
+
+        pxx = self.pxx_all[index]
         time_bins = self.time_bins
+        freq_bins = self.freq_bins
         if time_range is not None:
-            (pxx, time_bins) = truncate_by_value(pxx, time_bins, time_range)
+            (pxx, time_bins) = truncate_by_value(pxx, time_bins, time_range, dim=0)
+        if freq_range is not None:
+            (pxx, freq_bins) = truncate_by_value(pxx, freq_bins, freq_range, dim=1)
 
         im = axes.imshow(
             # TODO don't transpose anymore? update freq truncation too...
             pxx.transpose(),
             origin="lower",
             aspect="auto",
-            extent=[time_bins[0], time_bins[-1], freq_bins[0], self.freq_bins[-1]],
+            extent=[time_bins[0], time_bins[-1], freq_bins[0], freq_bins[-1]],
             cmap=plt.cm.gist_heat,
             interpolation="none",
             vmin=vmin,

@@ -72,27 +72,51 @@ def main():
 
     fig = plt.figure()
     axes = fig.gca()
-    plot_props = PlotProperties(title='its a plot!', xlabel='im a x-axis')
 
     session = Session("/home/em/data/eeg_tests/2017-01-30/2017-01-30_19-17-10")
+    # maybe 9,10,11,12 are bad?
+    session.load_eeg(list(range(1,9))+list(range(13,33)))
+    # session.load_eeg(range(1,33))
+    # session.load_eeg(range(1,3))
+    session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, use_CAR=False)
+    # session.eeg_data.plot_channel(1, axes)
 
-    session.load_eeg(range(1,3))
-
-    # foo = session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7)
-    session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
+    # session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
+    session.spectrum = Spectrogram(session.eeg_data)
+    session.spectrum.calculate_all()
 
     onset_list = get_manual_onset_times(session.motion)
-    # lmp = []
+    plot_props = PlotProperties(title='its a plot!', xlabel='Time (s)', ylabel='Mean Amplitude')
+    time_interval = [-4, 4]
+    fig_dir_name = "fig_onsets"
     for channel_num in session.eeg_data.channel_nums:
-        onsets = session.eeg_data.get_intervals(channel_num, onset_list, [-1, 2])
+        title_str = ('%s, Fs=%d, lowpass %0.2f, CAR=%s, channel %d' % (
+            session.name, session.spectrum.data.Fs,
+            session.eeg_data.preprocess_config['lowpass_cutoff'],
+            session.eeg_data.preprocess_config['use_CAR'],
+            channel_num))
+        plot_props.title = title_str
+
+        onsets = session.eeg_data.get_intervals(channel_num, onset_list, time_interval)
         # onsets.plot_all(axes)
         lmp = np.mean(onsets.x_all, axis=0)
         TimePlotter.plot_all(lmp, onsets.t, axes, plot_props)
-        session.save_fig(fig, "test_figs", "chan_%02d_motion_lmp.png" % channel_num)
+        session.save_fig(fig, fig_dir_name, "chan_%02d_onset_lmp.png" % channel_num)
+        plt.cla()
 
+        # TODO is averaging spectrograms like this OK? Especially since their time_bins don't quite line up?
+        spec_onsets = session.spectrum.get_intervals(channel_num, onset_list, time_interval)
+        spec_onsets.pxx_all = np.array([np.mean(spec_onsets.pxx_all, 0)])
+        spec_onsets.plot_channel(index=0, axes=axes, title=title_str,
+                                 freq_range=[0, session.eeg_data.preprocess_config['lowpass_cutoff']])
+        session.save_fig(fig, fig_dir_name, "chan_%02d_onset_freq.png" % channel_num)
+        plt.cla()
+        continue
+        # print("plotted")
         # plt.show()
+        # exit(4)
+    print("done")
     exit(4)
-
 
     # (x_onsets, t_onsets) = get_peri_onset_intervals(session.spectrum, channel_num, onset_times, time_interval)
     # print(session.eeg_data.x_all.shape)
@@ -111,11 +135,11 @@ def main():
      #e else = mean()
 
     exit(3)
-    data1.preprocess(downsample_factor=75, lowpass_cutoff=70)
-    data1.plot_channel(1, axes)
-    spectrum1 = Spectrogram(data1)
-    spectrum1.calculate_all()
-    spectrum1.plot_channel(1, axes, time_range=[0,10])
+    # data1.preprocess(downsample_factor=75, lowpass_cutoff=70)
+    # data1.plot_channel(1, axes)
+    # spectrum1 = Spectrogram(data1)
+    # spectrum1.calculate_all()
+    # spectrum1.plot_channel(1, axes, time_range=[0,10])
 
     plt.show()
     # data =

@@ -214,6 +214,8 @@ def truncate_by_index(x, t, index_range, dim=None):
         if dim is None:
             # use the last dimension by default
             dim = last_dim
+        # print(new_x.shape)
+        # print(new_t.shape)
         assert new_x.shape[dim] == new_t.shape[0]
         dims_before = dim
         dims_after = (last_dim - dim)
