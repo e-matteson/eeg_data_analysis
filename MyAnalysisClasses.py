@@ -6,6 +6,7 @@ import scipy.signal as sig
 import scipy.stats as stats
 import copy
 import json
+import gc
 
 from MyUtilities import *
 
@@ -183,17 +184,52 @@ class AnalogData:
         for chan_index in range(self.count_channels()):
             self.x_all[chan_index, :] = lowpass(self.x_all[chan_index, :], cutoff, self.Fs)
 
-    def plot_channel(self, channel_num, axes, title='', plot_properties=None):
+    def plot_channel(self, channel_num, axes, plot_properties=None):
         if plot_properties is None:
             plot_properties = PlotProperties(xlabel="Time (s)", ylabel="Amplitude")
         channel_index = self.channel_num_to_index(channel_num)
         TimePlotter.plot_channel(self.x_all[channel_index], self.t, axes, plot_properties)
+
+    def plot_all(self, axes, plot_properties=None):
+        if plot_properties is None:
+            plot_properties = PlotProperties(xlabel="Time (s)", ylabel="Amplitude")
+        TimePlotter.plot_all(self.x_all, self.t, axes, plot_properties)
 
     def truncate_value(self, time_range):
         (self.x_all, self.t) = truncate_by_value(self.x_all, self.t, time_range)
 
     def truncate_index(self, index_range):
         (self.x_all, self.t) = truncate_by_index(self.x_all, self.t, index_range)
+
+    def get_intervals(self, channel_num, onset_times, interval_times):
+        """Return """
+        x_onsets = []
+        t_onset = None
+        channel_index = self.channel_num_to_index(channel_num)
+        interval_times = np.array(interval_times)
+        for onset in onset_times:
+            time_range = interval_times + onset
+            (x_interval, t_interval) = truncate_by_value(self.x_all[channel_index], self.t, time_range)
+            gc.collect() # force garbage collection, or we'll run out of memory
+            x_onsets.append(x_interval)
+            new_t_onset = t_interval - onset
+            if t_onset is None:
+                t_onset = new_t_onset
+            elif not np.isclose(t_onset, new_t_onset).all():
+                raise RuntimeError("onset time arrays are inconsistent")
+        x_onsets = np.array(x_onsets)
+        t_onset = np.array(t_onset)
+        onsets = AnalogData(x_onsets, t_onset, self.Fs)
+        print(x_onsets)
+        print(t_onset)
+        return onsets
+
+        # return x_onsets
+        # x_mean_onset = np.mean(x_onsets, axis=0)
+        # x_sem_onset = stats.sem(x_onsets, axis=0)
+        # # x_std_onset = np.std(x_onsets, axis=0)
+        # t_mean_onset = (np.arange(len(x_mean_onset)) - num_samples_before) / Fs_eeg # off by one?
+        # return (x_mean_onset, x_sem_onset, t_mean_onset, x_onsets)
 
 
 class PlotProperties:
@@ -568,3 +604,36 @@ class MotionLoader:
                     # huge jump down, shift back up
                     x_motion_copy[d][i] += range_size
         return x_motion_copy
+
+# def get_peri_onset_intervals(t, onset_times, time_interval):
+#     # TODO take onset times (seconds) instead of indices?
+#     # index interval is relative to onset at 0 (eg. [-100, 500])
+#     # num_samples_before =
+#     # num_samples_after  = time_interval[1] * analog_data.Fs
+#     index_intervals = []
+#     for onset_time in onset_times:
+#         # if ons
+#         if
+#         onset_index = np.searchsorted(analog_data[], onset)
+#         start = onset_index+index_interval[0]
+#         end = onset_index+index_interval[1]
+#         index_intervals.append([start,end])
+#         # x_onsets.append(analog_data.x_all[channel_index, start:end])
+#     return index_intervals
+
+
+def plot_mvmt_onset_lines(ax, onset_indices, line_y_coords, Fs_eeg, color='k'):
+    for onset in onset_indices:
+        onset_time = onset / Fs_eeg
+        print(onset)
+        print(onset_time)
+        ax.plot([onset_time, onset_time+1.0/Fs_eeg], line_y_coords, color=color, linestyle='--')
+
+def show_mvmt_onset_lines_over_quats(onset_indices, motion, axes):
+
+    Fs = motion.sensors[0].Fs
+    motion.plot_sensor(0, axes)
+    plot_mvmt_onset_lines(axes, onset_indices, [80000, -20000], Fs)
+    # plot_quaternion(ax, x_motion0, t_motion,  xlabel='', ylabel='Hand Orientation ')
+    # plot_quaternion(ax, x_motion1, t_motion,  xlabel='', ylabel='Forearm Orientation  ')
+    # plot_quaternion(ax, x_motion2, t_motion,  ylabel='Upper Arm Orientation ')

@@ -157,7 +157,6 @@ def debounce_discrete_signal(x, min_samples_per_chunk):
         print('debounce_discrete_signal: removed %d bounces' % num_bounces_removed)
     return x_new
 
-
 # def quaternion_to_euler(wxyz_list):
 # # TODO figure out how to calculate this correctly
 #     (w,x,y,z) = tuple(wxyz_list)
@@ -177,6 +176,7 @@ def truncate_by_value(x, t, t_range, dim=None):
     if t_range[1] <= t_range[0] or t_range[1] > t[-1]:
         raise RuntimeError('Invalid time range')
 
+    # TODO can we use np.searchsorted instead of argmax stuff?
     index_range = [0, t.shape[-1]-1]
     if t_range[0] > t[0]:
         index_range[0] = np.argmax(t>t_range[0])
@@ -322,5 +322,8 @@ def plot_time(axes, data, t, title='', xlabel='Time (s)', ylabel='Amplitude',
         axes.set_ylim(ylim)
 
 def get_index_of_value(array, value):
-    index = np.argmax(array>value)
+    # TODO just use np.searchsorted instead!
+
+    index = np.searchsorted(array, value)
+    # index = np.argmax(array>value)
     return index
