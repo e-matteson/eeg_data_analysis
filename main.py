@@ -75,24 +75,36 @@ def main():
 
     session = Session("/home/em/data/eeg_tests/2017-01-30/2017-01-30_19-17-10")
     # maybe 9,10,11,12 are bad?
-    session.load_eeg(list(range(1,9))+list(range(13,33)))
+    # session.load_eeg(list(range(1,9))+list(range(13,33)))
     # session.load_eeg(range(1,33))
     # session.load_eeg(range(1,3))
-    session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, use_CAR=False)
+    # session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, highpass_cutoff=2, use_CAR=False)
     # session.eeg_data.plot_channel(1, axes)
 
-    # session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
+    session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
+
+    for i in range(3):
+        subplot_axes  = fig.add_subplot(1,3,i+1)
+        sensor = session.motion.sensors[i]
+        # subplot_axes.plot(sensor.t, sensor.x_all.transpose())
+        session.motion.plot_sensor(i, subplot_axes)
+    plt.show()
+    exit(3)
+
     session.spectrum = Spectrogram(session.eeg_data)
     session.spectrum.calculate_all()
 
     onset_list = get_manual_onset_times(session.motion)
     plot_props = PlotProperties(title='its a plot!', xlabel='Time (s)', ylabel='Mean Amplitude')
     time_interval = [-4, 4]
-    fig_dir_name = "fig_onsets"
+    fig_dir_name = "fig_onsets_hp"
+    # TODO highpass filter is broken! test
+    #  and stop remaking filters every time. And decide what filter types to use.
     for channel_num in session.eeg_data.channel_nums:
-        title_str = ('%s, Fs=%d, lowpass %0.2f, CAR=%s, channel %d' % (
+        title_str = ('%s, Fs=%d, lowpass %0.2f, highpass %0.2f, CAR=%s, channel %d' % (
             session.name, session.spectrum.data.Fs,
             session.eeg_data.preprocess_config['lowpass_cutoff'],
+            session.eeg_data.preprocess_config['highpass_cutoff'],
             session.eeg_data.preprocess_config['use_CAR'],
             channel_num))
         plot_props.title = title_str

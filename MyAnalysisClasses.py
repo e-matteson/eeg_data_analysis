@@ -134,12 +134,13 @@ class AnalogData:
             raise RuntimeError("channel number %d does not exist" % number)
         return channel_index
 
-    def preprocess(self, downsample_factor=None, lowpass_cutoff=None, use_CAR=True):
+    def preprocess(self, downsample_factor=None, lowpass_cutoff=None, highpass_cutoff=None, use_CAR=True):
         # TODO support other types of filtering
 
         # Store settings, for future reference
         self.preprocess_config['downsample_factor'] = downsample_factor
         self.preprocess_config['lowpass_cutoff'] = lowpass_cutoff
+        # self.preprocess_config['highpass_cutoff'] = highpass_cutoff
         self.preprocess_config['use_CAR'] = use_CAR
 
         # common average reference
@@ -149,6 +150,10 @@ class AnalogData:
         # lowpass filter
         if lowpass_cutoff is not None:
             self.lowpass(lowpass_cutoff)
+
+        # highpass filter
+        if highpass_cutoff is not None:
+            self.highpass(highpass_cutoff)
 
         # downsample to a new sample rate
         if downsample_factor is not None:
@@ -180,9 +185,13 @@ class AnalogData:
 
     def lowpass(self, cutoff):
         """Lowpass filter all data channels to the given cutoff frequency (Hz)"""
-        # x_eeg_all_copy = np.zeros(x_eeg_all.shape)
         for chan_index in range(self.count_channels()):
             self.x_all[chan_index, :] = lowpass(self.x_all[chan_index, :], cutoff, self.Fs)
+
+    def highpass(self, cutoff):
+        """Highpass filter all data channels to the given cutoff frequency (Hz)"""
+        for chan_index in range(self.count_channels()):
+            self.x_all[chan_index, :] = highpass(self.x_all[chan_index, :], cutoff, self.Fs)
 
     def plot_channel(self, channel_num, axes, plot_properties=None):
         if plot_properties is None:
