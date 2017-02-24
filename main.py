@@ -104,7 +104,7 @@ def main():
         title_str = ('%s, Fs=%d, lowpass %0.2f, highpass %0.2f, CAR=%s, channel %d' % (
             session.name, session.spectrum.data.Fs,
             session.eeg_data.preprocess_config['lowpass_cutoff'],
-            session.eeg_data.preprocess_config['highpass_cutoff'],
+            # session.eeg_data.preprocess_config['highpass_cutoff'],
             session.eeg_data.preprocess_config['use_CAR'],
             channel_num))
         plot_props.title = title_str

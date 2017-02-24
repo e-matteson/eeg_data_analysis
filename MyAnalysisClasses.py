@@ -140,7 +140,7 @@ class AnalogData:
         # Store settings, for future reference
         self.preprocess_config['downsample_factor'] = downsample_factor
         self.preprocess_config['lowpass_cutoff'] = lowpass_cutoff
-        # self.preprocess_config['highpass_cutoff'] = highpass_cutoff
+        self.preprocess_config['highpass_cutoff'] = highpass_cutoff
         self.preprocess_config['use_CAR'] = use_CAR
 
         # common average reference
