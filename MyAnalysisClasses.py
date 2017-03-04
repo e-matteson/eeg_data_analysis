@@ -7,6 +7,8 @@ import scipy.stats as stats
 import copy
 import json
 import gc
+from sklearn.decomposition import FastICA
+
 
 from MyUtilities import *
 
@@ -507,6 +509,7 @@ class MotionData:
          """sensors is a list of AnalogData objects containing motion samples from each sensor"""
          # TODO consider storing sensors in dictionary
          # TODO consider storing other things, like enable index
+         # TODO sample rate is wrong! says its 30KHz
          self.sensors=sensors
 
     def num_sensors():
@@ -689,3 +692,10 @@ def show_mvmt_onset_lines_over_quats(onset_indices, motion, axes):
     # plot_quaternion(ax, x_motion0, t_motion,  xlabel='', ylabel='Hand Orientation ')
     # plot_quaternion(ax, x_motion1, t_motion,  xlabel='', ylabel='Forearm Orientation  ')
     # plot_quaternion(ax, x_motion2, t_motion,  ylabel='Upper Arm Orientation ')
+
+def ica(analog_data):
+    # see: http://scikit-learn.org/stable/auto_examples/decomposition/plot_ica_blind_source_separation.html
+
+    ica = FastICA() # n_components = ?? Same as num of channels?
+    signals = ica.fit_transform(analog_data.x_all)
+    mixing_matrix = ica.fit_transform(analog_data.x_all)

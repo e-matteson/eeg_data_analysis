@@ -56,7 +56,64 @@ def test2():
     # print (t)
     # print(truncate_by_value(x, t, [1.5, 4.1]))
 
+def plot_mean_onsets(fig, session, time_interval, onset_list, fig_dir_name):
+    # Untested, since it was moved into separate function
+    axes=fig.gca()
+    plot_props = PlotProperties(title='its a plot!', xlabel='Time (s)', ylabel='Mean Amplitude')
+    for channel_num in session.eeg_data.channel_nums:
+        title_str = ('%s, Fs=%d, lowpass %0.2f, highpass %0.2f, CAR=%s, channel %d' % (
+            session.name, session.spectrum.data.Fs,
+            session.eeg_data.preprocess_config['lowpass_cutoff'],
+            session.eeg_data.preprocess_config['highpass_cutoff'],
+            session.eeg_data.preprocess_config['use_CAR'],
+            channel_num))
+        plot_props.title = title_str
 
+        onsets = session.eeg_data.get_intervals(channel_num, onset_list, time_interval)
+        # onsets.plot_all(axes)
+        lmp = np.mean(onsets.x_all, axis=0)
+        TimePlotter.plot_all(lmp, onsets.t, axes, plot_props)
+        session.save_fig(fig, fig_dir_name, "chan_%02d_onset_lmp.png" % channel_num)
+        plt.cla()
+
+        # TODO is averaging spectrograms like this OK? Especially since their time_bins don't quite line up?
+        spec_onsets = session.spectrum.get_intervals(channel_num, onset_list, time_interval)
+        spec_onsets.pxx_all = np.array([np.mean(spec_onsets.pxx_all, 0)])
+        spec_onsets.plot_channel(index=0, axes=axes, title=title_str,
+                                 freq_range=[0, session.eeg_data.preprocess_config['lowpass_cutoff']])
+        session.save_fig(fig, fig_dir_name, "chan_%02d_onset_freq.png" % channel_num)
+        plt.cla()
+
+def plot_all_onsets(fig, session, time_interval, onset_list, fig_dir_name, ylim):
+    axes = fig.gca()
+
+    # ylim = [session.eeg_data.x_all.min(), session.eeg_data.x_all.max()]
+    plot_props = PlotProperties(title='its a plot!', xlabel='Time (s)', ylabel='Amplitude', ylim=ylim)
+    for channel_num in session.eeg_data.channel_nums:
+
+        onsets = session.eeg_data.get_intervals(channel_num, onset_list, time_interval)
+        spec_onsets = session.spectrum.get_intervals(channel_num, onset_list, time_interval)
+        assert(len(onsets.channel_nums) == spec_onsets.pxx_all.shape[0])
+        for onset_index in onsets.channel_nums:
+            # in this case, onset channel names and onset indices are the same, so we kinda mix them together
+            print("onset num: ", onset_index)
+            # Time Domain:
+            title_str = ('%s, Fs=%d, lowpass %0.0f, CAR=%s, channel%d, onset%d' % (
+                session.name, session.eeg_data.Fs,
+                session.eeg_data.preprocess_config['lowpass_cutoff'],
+                session.eeg_data.preprocess_config['use_CAR'],
+                channel_num, onset_index))
+            plot_props.title = title_str
+
+            onsets.plot_channel(onset_index, axes, plot_props)
+            session.save_fig(fig, fig_dir_name, "chan%02d_onset%02d_time.png" % (channel_num, onset_index))
+            plt.cla()
+
+            # Frequency Domain:
+            spec_onsets.plot_channel(index=onset_index, axes=axes, title=title_str,
+                                    freq_range=[0, session.eeg_data.preprocess_config['lowpass_cutoff']])
+            session.save_fig(fig, fig_dir_name, "chan%02d_onset%02d_freq.png" % (channel_num, onset_index))
+            plt.cla()
 
 def get_manual_onset_times(motion_data):
     """For session '/home/em/data/eeg_tests/2017-01-30/2017-01-30_19-17-10' """
@@ -77,56 +134,33 @@ def main():
     # maybe 9,10,11,12 are bad?
     # session.load_eeg(list(range(1,9))+list(range(13,33)))
     # session.load_eeg(range(1,33))
-    # session.load_eeg(range(1,3))
+    session.load_eeg(range(1,3))
+    # session.load_eeg(range(28,33))
     # session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, highpass_cutoff=2, use_CAR=False)
+    session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, use_CAR=False)
     # session.eeg_data.plot_channel(1, axes)
 
-    session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
-
-    for i in range(3):
-        subplot_axes  = fig.add_subplot(1,3,i+1)
-        sensor = session.motion.sensors[i]
-        # subplot_axes.plot(sensor.t, sensor.x_all.transpose())
-        session.motion.plot_sensor(i, subplot_axes)
-    plt.show()
-    exit(3)
+    # session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
+    # for i in range(3):
+    #     subplot_axes  = fig.add_subplot(1,3,i+1)
+    #     sensor = session.motion.sensors[i]
+    #     # subplot_axes.plot(sensor.t, sensor.x_all.transpose())
+    #     session.motion.plot_sensor(i, subplot_axes)
+    # plt.show()
+    # exit(3)
 
     session.spectrum = Spectrogram(session.eeg_data)
     session.spectrum.calculate_all()
 
     onset_list = get_manual_onset_times(session.motion)
-    plot_props = PlotProperties(title='its a plot!', xlabel='Time (s)', ylabel='Mean Amplitude')
     time_interval = [-4, 4]
-    fig_dir_name = "fig_onsets_hp"
+    plot_mean_onsets(fig, session, time_interval, onset_list, "fig_mean_onsets")
+    # TODO set ylim automatically somehow
+    # plot_all_onsets(fig, session, time_interval, onset_list, "fig_all_onsets", [-60,60])
+
+
     # TODO highpass filter is broken! test
     #  and stop remaking filters every time. And decide what filter types to use.
-    for channel_num in session.eeg_data.channel_nums:
-        title_str = ('%s, Fs=%d, lowpass %0.2f, highpass %0.2f, CAR=%s, channel %d' % (
-            session.name, session.spectrum.data.Fs,
-            session.eeg_data.preprocess_config['lowpass_cutoff'],
-            # session.eeg_data.preprocess_config['highpass_cutoff'],
-            session.eeg_data.preprocess_config['use_CAR'],
-            channel_num))
-        plot_props.title = title_str
-
-        onsets = session.eeg_data.get_intervals(channel_num, onset_list, time_interval)
-        # onsets.plot_all(axes)
-        lmp = np.mean(onsets.x_all, axis=0)
-        TimePlotter.plot_all(lmp, onsets.t, axes, plot_props)
-        session.save_fig(fig, fig_dir_name, "chan_%02d_onset_lmp.png" % channel_num)
-        plt.cla()
-
-        # TODO is averaging spectrograms like this OK? Especially since their time_bins don't quite line up?
-        spec_onsets = session.spectrum.get_intervals(channel_num, onset_list, time_interval)
-        spec_onsets.pxx_all = np.array([np.mean(spec_onsets.pxx_all, 0)])
-        spec_onsets.plot_channel(index=0, axes=axes, title=title_str,
-                                 freq_range=[0, session.eeg_data.preprocess_config['lowpass_cutoff']])
-        session.save_fig(fig, fig_dir_name, "chan_%02d_onset_freq.png" % channel_num)
-        plt.cla()
-        continue
-        # print("plotted")
-        # plt.show()
-        # exit(4)
     print("done")
     exit(4)
 
