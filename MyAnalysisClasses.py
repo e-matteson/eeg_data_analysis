@@ -8,6 +8,8 @@ import copy
 import json
 import gc
 from sklearn.decomposition import FastICA
+from datetime import datetime
+import pickle
 
 
 from MyUtilities import *
@@ -213,6 +215,7 @@ class AnalogData:
         (self.x_all, self.t) = truncate_by_index(self.x_all, self.t, index_range)
 
     def get_intervals(self, channel_num, onset_times, interval_times):
+        '''Get chunks of data in the interval surrounding each onset time'''
         x_onsets = []
         t_onset = None
         channel_index = self.channel_num_to_index(channel_num)
@@ -265,8 +268,10 @@ class Session:
     # this sample rate is a constant (unless we change open ephys settings)
     Fs_openephys = 30000
     open_ephys = OpenEphysWrapper()
+    pickle_path = "pickles/session.pickle"
 
     def __init__(self, directory, name=None, eeg_data=None):
+        ''' If you add new arguments to this constructor, add them to Session.new() too. '''
         self.directory = directory # path of directory containing data files
 
         if name is not None:
@@ -275,12 +280,38 @@ class Session:
             # if a session name is not supplied, use the name of the data directory
             self.name = os.path.basename(directory.strip('/'))
 
-        self.eeg_data = eeg_data    # AnalogData object containing EEG data
+        self.eeg_data = eeg_data    # AnalogData object of EEG data
+        self.spectrum = None        # AnalogData object of spectrum of EEG
+        self.ica = None             # AnalogData object of ICA components
+        self.ica_spectrum = None    # AnalogData object of spectrum of ICA
         self.motion = None          # MotionData object
+
+    def new(directory, name=None, eeg_data=None, from_pickle=None):
+        # Either load raw data from the directory, or load cached, preprocessed data from the pickle file
+        # Use this static method for creating new sessions, if you want the option of loading from a pickle.
+        if from_pickle:
+            return Session.unpickle(os.path.join(directory, Session.pickle_path))
+        else:
+            return Session(directory, name=name, eeg_data=eeg_data)
+
+    def pickle(self):
+        # Store the session object to a file, for later use.
+        # This is much faster than reloading and preprocessing it from scratch every time.
+        self.date_pickled = datetime.today()
+        with open(os.path.join(self.directory, self.pickle_path), 'wb') as f:
+            pickle.dump(self, f)
+
+    def unpickle(pickle_path):
+        # This is a static method, call it like: my_sesssion = Session.unpickle()
+        with open(pickle_path, 'rb') as f:
+            session = pickle.load(f)
+        print("Loading cached session that was pickled on: %s" % session.date_pickled)
+        return session
 
     def __str__(self):
         string = "<Session: %s, %s, %s>" % (self.name, self.eeg_data, self.sync_data)
         return string
+
 
     def load_eeg(self, channel_nums):
         if self.eeg_data is not None:

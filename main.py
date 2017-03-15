@@ -2,6 +2,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+
 from MyAnalysisClasses import *
 
 def make_fake_data():
@@ -84,6 +85,7 @@ def plot_mean_onsets(fig, session, time_interval, onset_list, fig_dir_name):
         plt.cla()
 
 def plot_all_onsets(fig, session, time_interval, onset_list, fig_dir_name, ylim):
+    # TODO set ylim automatically somehow
     axes = fig.gca()
 
     # ylim = [session.eeg_data.x_all.min(), session.eeg_data.x_all.max()]
@@ -204,99 +206,63 @@ def plot_all_ica(fig, session, components, ica_spectrum, fig_dir_name):
         session.save_fig(fig, fig_dir_name, "ica%02d_freq.png" % (channel_num))
         plt.cla()
 
+def plot_motion_sensors(fig, session):
+    for i in range(3):
+        subplot_axes  = fig.add_subplot(1,3,i+1)
+        sensor = session.motion.sensors[i]
+        # subplot_axes.plot(sensor.t, sensor.x_all.transpose())
+        session.motion.plot_sensor(i, subplot_axes)
 
+
+def load_data(from_pickle=False):
+    # session = Session('/home/em/data/eeg_tests/2017-01-30/2017-01-30_19-17-10', from_pickle=from_pickle)
+    session = Session.new('/home/em/data/eeg_tests/2017-01-30/2017-01-30_19-17-10', from_pickle=from_pickle)
+
+    if from_pickle:
+        # we loaded cached data that was already preprocessed, we're done
+        return session
+
+    # else, load and preprocess data from scratch
+    session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
+
+    # maybe 9,10,11,12 are bad?
+    # session.load_eeg(list(range(1,9))+list(range(13,33)))
+    session.load_eeg([1,2])
+    session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, use_CAR=False)
+
+    session.spectrum = Spectrogram(session.eeg_data)
+    session.spectrum.calculate_all()
+
+    session.ica = ica(session.eeg_data, session.eeg_data.count_channels)
+    session.ica_spectrum = Spectrogram(session.ica)
+    session.ica_spectrum.calculate_all()
+
+    # cache pickled data to a file, for faster loading next time
+    session.pickle()
+
+    return session
 
 def main():
+    # TODO highpass filter is broken! test
+    #  and stop remaking filters every time. And decide what filter types to use.
 
     fig = plt.figure()
     axes = fig.gca()
 
-    session = Session("/home/em/data/eeg_tests/2017-01-30/2017-01-30_19-17-10")
+    # session=load_data(from_pickle=False)
+    session=load_data(from_pickle=True)
 
-
-    session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
-    # for i in range(3):
-    #     subplot_axes  = fig.add_subplot(1,3,i+1)
-    #     sensor = session.motion.sensors[i]
-    #     # subplot_axes.plot(sensor.t, sensor.x_all.transpose())
-    #     session.motion.plot_sensor(i, subplot_axes)
-    # plt.show()
-    # exit(3)
-
-    # maybe 9,10,11,12 are bad?
-    session.load_eeg(list(range(1,9))+list(range(13,33)))
-    # session.load_eeg(range(1,33))
-    # session.load_eeg(range(1,33))
-    # session.load_eeg(range(28,33))
-    # session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, highpass_cutoff=2, use_CAR=False)
-    session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, use_CAR=False)
-
-    components = ica(session.eeg_data, session.eeg_data.count_channels)
-    ica_spectrum = Spectrogram(components)
-    ica_spectrum.calculate_all()
-    plot_all_ica(fig, session, components, ica_spectrum, "fig_ica")
-
-
-    # session.spectrum = Spectrogram(session.eeg_data)
-    # session.spectrum.calculate_all()
+    # plot_motion_sensors(fig, session)
+    # plot_all_ica(fig, session, session.ica, session.ica_spectrum, "fig_ica")
 
     onset_list = get_manual_onset_times(session.motion)
     time_interval = [-4, 4]
+
+
     # plot_mean_onsets(fig, session, time_interval, onset_list, "fig_mean_onsets")
-
-    # TODO set ylim automatically somehow
     # plot_all_onsets(fig, session, time_interval, onset_list, "fig_all_onsets", [-60,60])
-
-    plot_all_ica_onsets(fig, session, components, ica_spectrum, time_interval, onset_list, "fig_ica_all_onsets", None)
-    plot_mean_ica_onsets(fig, session, components, ica_spectrum, time_interval, onset_list, "fig_ica_mean_onsets")
-
-    # TODO highpass filter is broken! test
-    #  and stop remaking filters every time. And decide what filter types to use.
-    print("done")
-    exit(4)
-
-    # (x_onsets, t_onsets) = get_peri_onset_intervals(session.spectrum, channel_num, onset_times, time_interval)
-    # print(session.eeg_data.x_all.shape)
-    # data1 = session.eeg_data.copy(index_range=[0, 10*session.eeg_data.Fs])
-
-
-
-    # show_mvmt_onset_lines_over_quats(onset_list, session.motion, axes)
-
-    data1 = session.eeg_data
-    interval =  data1.Fs*np.array([-1, 1])
-
-    print(onsets.x_all)
-    print(np.mean(onsets.x_all, axis=0))
-    axes.plot(onsets.t, np.mean(onsets.x_all, 0))
-     #e else = mean()
-
-    exit(3)
-    # data1.preprocess(downsample_factor=75, lowpass_cutoff=70)
-    # data1.plot_channel(1, axes)
-    # spectrum1 = Spectrogram(data1)
-    # spectrum1.calculate_all()
-    # spectrum1.plot_channel(1, axes, time_range=[0,10])
-
-    plt.show()
-    # data =
-    # session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70)
-    # session.spectrum = Spectrogram(session.eeg_data)
-    # session.spectrum.calculate_all()
-
-    # session.spectrum.plot_channel(1, axes, title="This is a spectrogram!")
-
-    # session.save_fig(fig, "test_figs", "chan_%02d_freq.png" % 1)
+    # plot_all_ica_onsets(fig, session, session.ica, session.ica_spectrum, time_interval, onset_list, "fig_ica_all_onsets", None)
+    # plot_mean_ica_onsets(fig, session, session.ica, session.ica_spectrum, time_interval, onset_list, "fig_ica_mean_onsets")
 
 main()
 
-    # session.motion.plot_sensor(0, axes)
-    # for i in range(3):
-    #     subplot_axes  = fig.add_subplot(1,3,i+1)
-    #     sensor = session.motion.sensors[i]
-    #     # subplot_axes.plot(sensor.t, sensor.x_all.transpose())
-    #     session.motion.plot_sensor(i, subplot_axes)
-    #     # for q in range(4):
-    #     #     grad = np.gradient(sensor.x_all[q])
-    #     #     print(grad)
-    #     #     subplot_axes.plot(sensor.t, grad)
