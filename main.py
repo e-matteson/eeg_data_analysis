@@ -1,4 +1,4 @@
-#! /bin/python3
+#! /usr/bin/env python3
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -61,10 +61,9 @@ def plot_mean_onsets(fig, session, time_interval, onset_list, fig_dir_name):
     axes=fig.gca()
     plot_props = PlotProperties(title='its a plot!', xlabel='Time (s)', ylabel='Mean Amplitude')
     for channel_num in session.eeg_data.channel_nums:
-        title_str = ('%s, Fs=%d, lowpass %0.2f, highpass %0.2f, CAR=%s, channel %d' % (
+        title_str = ('%s, Fs=%d, lowpass %0.2f, CAR=%s, channel %d' % (
             session.name, session.spectrum.data.Fs,
             session.eeg_data.preprocess_config['lowpass_cutoff'],
-            session.eeg_data.preprocess_config['highpass_cutoff'],
             session.eeg_data.preprocess_config['use_CAR'],
             channel_num))
         plot_props.title = title_str
@@ -115,6 +114,64 @@ def plot_all_onsets(fig, session, time_interval, onset_list, fig_dir_name, ylim)
             session.save_fig(fig, fig_dir_name, "chan%02d_onset%02d_freq.png" % (channel_num, onset_index))
             plt.cla()
 
+def plot_mean_ica_onsets(fig, session, components, ica_spectrum, time_interval, onset_list, fig_dir_name):
+    axes=fig.gca()
+    plot_props = PlotProperties(title='its a plot!', xlabel='Time (s)', ylabel='Mean Amplitude')
+    for channel_num in components.channel_nums:
+        title_str = ('%s, Fs=%d, lowpass %0.2f, CAR=%s, ica%d' % (
+            session.name, ica_spectrum.data.Fs,
+            session.eeg_data.preprocess_config['lowpass_cutoff'],
+            session.eeg_data.preprocess_config['use_CAR'],
+            channel_num))
+        plot_props.title = title_str
+
+        onsets = components.get_intervals(channel_num, onset_list, time_interval)
+        # onsets.plot_all(axes)
+        lmp = np.mean(onsets.x_all, axis=0)
+        TimePlotter.plot_all(lmp, onsets.t, axes, plot_props)
+        session.save_fig(fig, fig_dir_name, "ica_%02d_onset_lmp.png" % channel_num)
+        plt.cla()
+
+        # TODO is averaging spectrograms like this OK? Especially since their time_bins don't quite line up?
+        spec_onsets = ica_spectrum.get_intervals(channel_num, onset_list, time_interval)
+        spec_onsets.pxx_all = np.array([np.mean(spec_onsets.pxx_all, 0)])
+        spec_onsets.plot_channel(index=0, axes=axes, title=title_str,
+                                 freq_range=[0, session.eeg_data.preprocess_config['lowpass_cutoff']])
+        session.save_fig(fig, fig_dir_name, "ica_%02d_onset_freq.png" % channel_num)
+        plt.cla()
+
+def plot_all_ica_onsets(fig, session, components, ica_spectrum, time_interval, onset_list, fig_dir_name, ylim=None):
+    # TODO this is a mess of session and component usage.
+    axes = fig.gca()
+
+    # ylim = [session.eeg_data.x_all.min(), session.eeg_data.x_all.max()]
+    plot_props = PlotProperties(title='its a plot!', xlabel='Time (s)', ylabel='Amplitude', ylim=ylim)
+    for channel_num in components.channel_nums:
+
+        onsets = components.get_intervals(channel_num, onset_list, time_interval)
+        spec_onsets = ica_spectrum.get_intervals(channel_num, onset_list, time_interval)
+        assert(len(onsets.channel_nums) == spec_onsets.pxx_all.shape[0])
+        for onset_index in onsets.channel_nums:
+            # in this case, onset channel names and onset indices are the same, so we kinda mix them together
+            print("onset num: ", onset_index)
+            # Time Domain:
+            title_str = ('%s, Fs=%d, lowpass %0.0f, CAR=%s, ICA%d, onset%d' % (
+                session.name, components.Fs,
+                session.eeg_data.preprocess_config['lowpass_cutoff'],
+                session.eeg_data.preprocess_config['use_CAR'],
+                channel_num, onset_index))
+            plot_props.title = title_str
+
+            onsets.plot_channel(onset_index, axes, plot_props)
+            session.save_fig(fig, fig_dir_name, "ica%02d_onset%02d_time.png" % (channel_num, onset_index))
+            plt.cla()
+
+            # Frequency Domain:
+            spec_onsets.plot_channel(index=onset_index, axes=axes, title=title_str,
+                                    freq_range=[0, session.eeg_data.preprocess_config['lowpass_cutoff']])
+            session.save_fig(fig, fig_dir_name, "ica%02d_onset%02d_freq.png" % (channel_num, onset_index))
+            plt.cla()
+
 def get_manual_onset_times(motion_data):
     """For session '/home/em/data/eeg_tests/2017-01-30/2017-01-30_19-17-10' """
 
@@ -125,22 +182,39 @@ def get_manual_onset_times(motion_data):
              613.3]
     return times
 
+def plot_all_ica(fig, session, components, ica_spectrum, fig_dir_name):
+    axes=fig.gca()
+    y_range = [np.amin(components.x_all), np.amax(components.x_all)]
+    plot_props = PlotProperties(title='its a plot!', xlabel='time (s)', ylabel='ICA component amplitude')
+    for channel_num in components.channel_nums:
+        title_str = '%s, Fs=%d, lowpass %0.0f, CAR=%s, ICA %d' % (
+                session.name, session.eeg_data.Fs,
+                session.eeg_data.preprocess_config['lowpass_cutoff'],
+                session.eeg_data.preprocess_config['use_CAR'],
+                channel_num)
+        plot_props.title = title_str
+        plot_props.ylim = y_range
+
+        components.plot_channel(channel_num, axes, plot_props)
+        session.save_fig(fig, fig_dir_name, "ica%02d_time.png" % (channel_num))
+        plt.cla()
+
+        plot_props.ylim = None
+        ica_spectrum.plot_channel(num=channel_num, axes=axes, title=title_str)
+        session.save_fig(fig, fig_dir_name, "ica%02d_freq.png" % (channel_num))
+        plt.cla()
+
+
+
 def main():
 
     fig = plt.figure()
     axes = fig.gca()
 
     session = Session("/home/em/data/eeg_tests/2017-01-30/2017-01-30_19-17-10")
-    # maybe 9,10,11,12 are bad?
-    # session.load_eeg(list(range(1,9))+list(range(13,33)))
-    # session.load_eeg(range(1,33))
-    session.load_eeg(range(1,3))
-    # session.load_eeg(range(28,33))
-    # session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, highpass_cutoff=2, use_CAR=False)
-    session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, use_CAR=False)
-    # session.eeg_data.plot_channel(1, axes)
 
-    # session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
+
+    session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
     # for i in range(3):
     #     subplot_axes  = fig.add_subplot(1,3,i+1)
     #     sensor = session.motion.sensors[i]
@@ -149,15 +223,32 @@ def main():
     # plt.show()
     # exit(3)
 
-    session.spectrum = Spectrogram(session.eeg_data)
-    session.spectrum.calculate_all()
+    # maybe 9,10,11,12 are bad?
+    session.load_eeg(list(range(1,9))+list(range(13,33)))
+    # session.load_eeg(range(1,33))
+    # session.load_eeg(range(1,33))
+    # session.load_eeg(range(28,33))
+    # session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, highpass_cutoff=2, use_CAR=False)
+    session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, use_CAR=False)
+
+    components = ica(session.eeg_data, session.eeg_data.count_channels)
+    ica_spectrum = Spectrogram(components)
+    ica_spectrum.calculate_all()
+    plot_all_ica(fig, session, components, ica_spectrum, "fig_ica")
+
+
+    # session.spectrum = Spectrogram(session.eeg_data)
+    # session.spectrum.calculate_all()
 
     onset_list = get_manual_onset_times(session.motion)
     time_interval = [-4, 4]
-    plot_mean_onsets(fig, session, time_interval, onset_list, "fig_mean_onsets")
+    # plot_mean_onsets(fig, session, time_interval, onset_list, "fig_mean_onsets")
+
     # TODO set ylim automatically somehow
     # plot_all_onsets(fig, session, time_interval, onset_list, "fig_all_onsets", [-60,60])
 
+    plot_all_ica_onsets(fig, session, components, ica_spectrum, time_interval, onset_list, "fig_ica_all_onsets", None)
+    plot_mean_ica_onsets(fig, session, components, ica_spectrum, time_interval, onset_list, "fig_ica_mean_onsets")
 
     # TODO highpass filter is broken! test
     #  and stop remaking filters every time. And decide what filter types to use.

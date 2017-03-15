@@ -330,8 +330,7 @@ class TimePlotter:
         TimePlotter.plot_all(np.array([x]), t, axes, props)
 
     def plot_all(x_all, t, axes, props):
-        """Plot all channel of data on the given axes. Specify channel by
-        name/number, not index! props is a PlotProperties object."""
+        """Plot all channel of data on the given axes. props is a PlotProperties object."""
         # TODO add legend
         # TODO setting somethings twice?
         print(x_all.shape)
@@ -693,9 +692,15 @@ def show_mvmt_onset_lines_over_quats(onset_indices, motion, axes):
     # plot_quaternion(ax, x_motion1, t_motion,  xlabel='', ylabel='Forearm Orientation  ')
     # plot_quaternion(ax, x_motion2, t_motion,  ylabel='Upper Arm Orientation ')
 
-def ica(analog_data):
+def ica(analog_data, num_components):
     # see: http://scikit-learn.org/stable/auto_examples/decomposition/plot_ica_blind_source_separation.html
 
     ica = FastICA() # n_components = ?? Same as num of channels?
-    signals = ica.fit_transform(analog_data.x_all)
-    mixing_matrix = ica.fit_transform(analog_data.x_all)
+    # ICA expects matrix shape to be (num_samples, num_channels), the opposite of what we use
+    signals = ica.fit_transform(analog_data.x_all.transpose())
+    # mixing_matrix = ica.mixing_
+    # print(signals)
+    # print(mixing_matrix.shape)
+    # print(signals.shape)
+    # print(analog_data.x_all.transpose().shape)
+    return AnalogData(signals.transpose(), analog_data.t, analog_data.Fs, analog_data.channel_nums)
