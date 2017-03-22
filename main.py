@@ -2,6 +2,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+from sklearn import svm
 
 from MyAnalysisClasses import *
 
@@ -214,7 +215,7 @@ def plot_motion_sensors(fig, session):
         session.motion.plot_sensor(i, subplot_axes)
 
 
-def load_data(from_pickle=False):
+def load_data_2017_1_30(from_pickle=False):
     # session = Session('/home/em/data/eeg_tests/2017-01-30/2017-01-30_19-17-10', from_pickle=from_pickle)
     session = Session.new('/home/em/data/eeg_tests/2017-01-30/2017-01-30_19-17-10', from_pickle=from_pickle)
 
@@ -242,27 +243,41 @@ def load_data(from_pickle=False):
 
     return session
 
-def main():
+
+def main_evan():
     # TODO highpass filter is broken! test
     #  and stop remaking filters every time. And decide what filter types to use.
 
     fig = plt.figure()
     axes = fig.gca()
 
-    # session=load_data(from_pickle=False)
-    session=load_data(from_pickle=True)
+    session=load_data_2017_1_30(from_pickle=False)
+    # session=load_data_2017_1_30(from_pickle=True)
 
-    # plot_motion_sensors(fig, session)
+    plot_motion_sensors(fig, session)
+    plt.show()
     # plot_all_ica(fig, session, session.ica, session.ica_spectrum, "fig_ica")
 
     onset_list = get_manual_onset_times(session.motion)
     time_interval = [-4, 4]
 
+    # for channel_num in session.ica_spectrum.channel_nums:
+    #     spec_onsets = session.ica_spectrum.get_intervals(channel_num, onset_list, time_interval)
+    #     for onset_index in onsets.channel_nums:
+    #         # TODO select frequency band and time windows
+    #         pass
 
     # plot_mean_onsets(fig, session, time_interval, onset_list, "fig_mean_onsets")
     # plot_all_onsets(fig, session, time_interval, onset_list, "fig_all_onsets", [-60,60])
     # plot_all_ica_onsets(fig, session, session.ica, session.ica_spectrum, time_interval, onset_list, "fig_ica_all_onsets", None)
     # plot_mean_ica_onsets(fig, session, session.ica, session.ica_spectrum, time_interval, onset_list, "fig_ica_mean_onsets")
+
+def main_nathan():
+    print("Test movement labeling here.")
+
+def main():
+    main_evan()
+    # main_nathan()
 
 main()
 

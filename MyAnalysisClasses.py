@@ -302,7 +302,7 @@ class Session:
             pickle.dump(self, f)
 
     def unpickle(pickle_path):
-        # This is a static method, call it like: my_sesssion = Session.unpickle()
+        # This is a static method, call it like: my_new_sesssion = Session.unpickle()
         with open(pickle_path, 'rb') as f:
             session = pickle.load(f)
         print("Loading cached session that was pickled on: %s" % session.date_pickled)
