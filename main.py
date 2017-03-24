@@ -3,6 +3,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn import svm
+from sklearn.model_selection import cross_val_score
+from sklearn.ensemble import RandomForestClassifier
 
 from MyAnalysisClasses import *
 
@@ -227,8 +229,8 @@ def load_data_2017_1_30(from_pickle=False):
     session.load_motion('motion-1-30-17.txt', chunk_msb=8, chunk_lsb=7, enable=6)
 
     # maybe 9,10,11,12 are bad?
-    # session.load_eeg(list(range(1,9))+list(range(13,33)))
-    session.load_eeg([1,2])
+    session.load_eeg(list(range(1,9))+list(range(13,33)))
+    # session.load_eeg([1,2])
     session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, use_CAR=False)
 
     session.spectrum = Spectrogram(session.eeg_data)
@@ -243,6 +245,71 @@ def load_data_2017_1_30(from_pickle=False):
 
     return session
 
+def get_features(ica_spectrum, ica_nums, freq_indices, num_time_bins, onsets):
+    assert(len(ica_spectrum.pxx_all.shape) == 3)
+    pxx = ica_spectrum.pxx_all.copy()
+    t_pxx = ica_spectrum.time_bins
+
+    # Subtract out the average log power
+    avg = np.mean(pxx, 1)
+    avg = np.repeat(avg[:, np.newaxis, :], len(t_pxx), axis=1 )
+    # print(pxx.shape)
+    # print(np.mean(pxx, 1).shape)
+    # print(avg.shape)
+    pxx = pxx - avg
+
+    # Collect the bins into intervals
+    data = []
+    t_data = []
+    labels = []
+    for i in range(len(t_pxx) - num_time_bins):
+        sample = []
+        for ica_num in ica_nums:
+            for freq_index in freq_indices:
+                sample.extend(pxx[ica_num,  i:i+num_time_bins, freq_index])
+        data.append(sample)
+        # TODO what timestamps should go with these bins?
+        #  How do the spectrogram time_bins values correspond with the original
+        #  timestamps of the samples in the bins?
+        t_data.append(t_pxx[i : i + num_time_bins])
+
+        # Set label to 1 if there's a movement onset during the last included bin.
+        labels.append(0)
+        # print(t_data[-1])
+        for onset in onsets:
+            if onset > t_data[-1][-2] and onset <= t_data[-1][-1]:
+                # print(onset)
+                # print(t_data[-1])
+                labels[-1] = 1
+                break
+
+    data = np.array(data)
+    t_data = np.array(t_data)
+    labels = np.array(labels)
+    return (data, t_data, labels)
+
+def test_forest(data, labels):
+    predicted_labels = []
+    predicted_probs = []
+    for i in range(len(labels)):
+        train_data = np.delete(data, i, axis=0)
+        train_labels = np.delete(labels, i)
+        test_data = np.array([data[i]])
+        test_label = labels[i]
+
+        forest = RandomForestClassifier()
+        forest.fit(train_data, train_labels)
+        # predicted_labels.append(forest.predict(test_data))
+        predicted_probs.append(forest.predict_proba(test_data)[0])
+        print(test_label, predicted_probs[-1])
+        if test_label == 1:
+            print(predicted_probs[-1])
+        # scores = cross_val_score(forest, data, labels)
+    # predicted_labels = np.array(predicted_labels)
+    predicted_probs = np.array(predicted_probs)
+    # print(predicted_probs)
+    # print(labels[:10])
+    # print(sum(predicted_labels))
 
 def main_evan():
     # TODO highpass filter is broken! test
@@ -251,21 +318,44 @@ def main_evan():
     fig = plt.figure()
     axes = fig.gca()
 
-    session=load_data_2017_1_30(from_pickle=False)
-    # session=load_data_2017_1_30(from_pickle=True)
+    # session=load_data_2017_1_30(from_pickle=False)
+    session=load_data_2017_1_30(from_pickle=True)
 
-    plot_motion_sensors(fig, session)
-    plt.show()
+    # plot_motion_sensors(fig, session)
     # plot_all_ica(fig, session, session.ica, session.ica_spectrum, "fig_ica")
 
     onset_list = get_manual_onset_times(session.motion)
     time_interval = [-4, 4]
 
-    # for channel_num in session.ica_spectrum.channel_nums:
-    #     spec_onsets = session.ica_spectrum.get_intervals(channel_num, onset_list, time_interval)
-    #     for onset_index in onsets.channel_nums:
-    #         # TODO select frequency band and time windows
-    #         pass
+    print(session.eeg_data.x_all.shape)
+    print(session.ica_spectrum.pxx_all.shape)
+    print(session.ica_spectrum.time_bins.shape)
+    print(session.ica_spectrum.freq_bins.shape)
+
+    plot_props = PlotProperties(title='its a plot!', xlabel='im a x-axis')
+
+    # for ica_num in range(session.ica_spectrum.pxx_all.shape[0]):
+    # ica_num = 31
+    freq_index = 7
+    (data, t_data, labels) = get_features(session.ica_spectrum, [0,3], [7,10], 6, onset_list)
+    print(labels)
+    print(np.sum(labels))
+    print(labels.shape)
+    print(data.shape)
+    print(t_data.shape)
+    # exit(1)
+    test_forest(data, labels)
+
+    exit(3)
+    x = []
+
+
+    #     x = session.ica_spectrum[channel_num]
+    #     print(x)
+    #     exit(1)
+        # spec_onsets = session.ica_spectrum.get_intervals(channel_num, onset_list, time_interval)
+        # for onset_index in onsets.channel_nums:
+        #     pass
 
     # plot_mean_onsets(fig, session, time_interval, onset_list, "fig_mean_onsets")
     # plot_all_onsets(fig, session, time_interval, onset_list, "fig_all_onsets", [-60,60])
@@ -278,6 +368,18 @@ def main_nathan():
 def main():
     main_evan()
     # main_nathan()
+    # a = np.array([[[0,1,2,3], [4,5,6,7], [8,9,10,11]],
+    #               [[12,13,14,15], [16,17,18,19], [20,21,22,23] ]])
+    # b = np.mean(a, 1)
+    # print(a)
+    # print(b)
+    # # c = np.tile(b, (1, 3, 1))
+    # # c = np.repeat(b, 1, axis=1)
+    # # c = np.matlib.repmat(b, (1, 1, 1, 2))
+    # c = np.repeat(b[:, np.newaxis, :], 3, axis=1)
+    # print(c)
+    # print(a.shape)
+    # print(b.shape)
+    # print(c.shape)
 
 main()
-
