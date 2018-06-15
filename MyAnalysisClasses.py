@@ -35,8 +35,8 @@ class OpenEphysWrapper:
         # compute timestamps for each sample - I think this is the right way...
         t = np.array([np.arange(time, time+1024) for time in timestamps]).flatten() / sampleRate
         if not are_intervals_close(t, 1/sampleRate):
-            raise RuntimeError('load_continuous: timestamps may be wrong')
-            # print('WARNING: load_continuous: timestamps may be wrong')
+            # raise RuntimeError('load_continuous: timestamps may be wrong')
+            print('WARNING: load_continuous: timestamps may be wrong')
         return (x,t)
 
     def load_continuous_channels(self, prefix, data_directory, Fs_openephys, channel_nums, recording_num=1):
@@ -88,6 +88,7 @@ class AnalogData:
 
         # List of channel numbers that match the numbers in open ephys file
         #  names. These are NOT indices into x_all.
+        # TODO wait is this wrong if on channel_nums are given? will they start at 0?
         if channel_nums is None:
             self.channel_nums = range(x_all.shape[0])
         else:
@@ -139,8 +140,25 @@ class AnalogData:
             raise RuntimeError("channel number %d does not exist" % number)
         return channel_index
 
-    def preprocess(self, downsample_factor=None, lowpass_cutoff=None, highpass_cutoff=None, use_CAR=True):
+    def summary_string(self):
+        string = 'Fs=%dHz' % (self.Fs)
+
+        if 'lowpass_cutoff' in self.preprocess_config:
+            if self.preprocess_config['lowpass_cutoff'] is not None:
+                string += ', Lowpass=%dHz' %  self.preprocess_config['lowpass_cutoff']
+
+        if 'highpass_cutoff' in self.preprocess_config:
+            if self.preprocess_config['highpass_cutoff'] is not None:
+                string += ', Highpass=%dHz' %  self.preprocess_config['highpass_cutoff']
+
+        if 'use_CAR' in self.preprocess_config:
+            if self.preprocess_config['use_CAR']:
+                string += ', with CAR'
+        return string
+
+    def preprocess(self, downsample_factor=None, downsample_to=None, lowpass_cutoff=None, highpass_cutoff=None, use_CAR=True):
         # TODO support other types of filtering
+        # TODO check highpass filtering, it might be broken!
 
         # Store settings, for future reference
         self.preprocess_config['downsample_factor'] = downsample_factor
@@ -161,6 +179,7 @@ class AnalogData:
             self.highpass(highpass_cutoff)
 
         # downsample to a new sample rate
+        downsample_factor = self._get_downsample_factor(downsample_factor, downsample_to)
         if downsample_factor is not None:
             new_Fs = self.Fs / downsample_factor
             if new_Fs != int(new_Fs):
@@ -176,6 +195,16 @@ class AnalogData:
             self.downsample(downsample_factor)
             self.Fs = new_Fs
 
+    def _get_downsample_factor(self, downsample_factor, downsample_to):
+        if downsample_factor is not None and downsample_to is not None:
+            raise RuntimeError("Please provide only downsample_factor or downsample_to, not both")
+        elif downsample_factor is not None:
+            return downsample_factor
+        elif downsample_to is not None:
+            return int(self.Fs / downsample_to)
+        else:
+            # Both were none, nothing we can do.
+            return None
 
     def common_avg_reference(self):
         """Perform common average referencing on the data channels."""
@@ -219,6 +248,10 @@ class AnalogData:
 
     def truncate_index(self, index_range):
         (self.x_all, self.t) = truncate_by_index(self.x_all, self.t, index_range)
+
+    def min_max(self, channel_num):
+        channel = self.get_channel(channel_num)
+        return (np.amin(channel), np.amax(channel))
 
     def get_intervals(self, channel_num, onset_times, interval_times):
         '''Get chunks of data in the interval surrounding each onset time'''
@@ -293,7 +326,7 @@ class Session:
         self.ica_spectrum = None    # AnalogData object of spectrum of ICA
         self.motion = None          # MotionData object
 
-    def new(directory, name=None, eeg_data=None, from_pickle=None):
+    def new(directory, name=None, eeg_data=None, from_pickle=False):
         # Either load raw data from the directory, or load cached, preprocessed data from the pickle file
         # Use this static method for creating new sessions, if you want the option of loading from a pickle.
         if from_pickle:
@@ -376,8 +409,6 @@ class TimePlotter:
         """Plot all channel of data on the given axes. props is a PlotProperties object."""
         # TODO add legend
         # TODO setting somethings twice?
-        print(x_all.shape)
-        print(t.shape)
         assert(t.shape[0] == x_all.shape[-1])
         axes.plot(t, x_all.transpose(), linestyle=props.linestyle, marker=props.marker,
                   linewidth=props.linewidth, color=props.color)
