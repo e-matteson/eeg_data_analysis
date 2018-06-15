@@ -287,6 +287,7 @@ class Session:
             self.name = os.path.basename(directory.strip('/'))
 
         self.eeg_data = eeg_data    # AnalogData object of EEG data
+        self.adc_data = None        # AnalogData object of other analog inputs
         self.spectrum = None        # AnalogData object of spectrum of EEG
         self.ica = None             # AnalogData object of ICA components
         self.ica_spectrum = None    # AnalogData object of spectrum of ICA
@@ -325,6 +326,11 @@ class Session:
 
         self.eeg_data = self.open_ephys.load_continuous_channels('100_CH', self.directory, self.Fs_openephys, channel_nums)
 
+    def load_adc(self, channel_nums):
+        if self.adc_data is not None:
+            raise RuntimeError("ADC data has already been loaded, what are you doing?")
+
+        self.adc_data = self.open_ephys.load_continuous_channels('100_ADC', self.directory, self.Fs_openephys, channel_nums)
 
     def load_motion(self, motion_file, chunk_msb=None, chunk_lsb=None, enable=None):
         # TODO organize this better
