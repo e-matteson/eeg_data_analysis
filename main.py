@@ -366,20 +366,51 @@ def main_nathan():
     print("Test movement labeling here.")
 
 def main():
-    main_evan()
-    # main_nathan()
-    # a = np.array([[[0,1,2,3], [4,5,6,7], [8,9,10,11]],
-    #               [[12,13,14,15], [16,17,18,19], [20,21,22,23] ]])
-    # b = np.mean(a, 1)
-    # print(a)
-    # print(b)
-    # # c = np.tile(b, (1, 3, 1))
-    # # c = np.repeat(b, 1, axis=1)
-    # # c = np.matlib.repmat(b, (1, 1, 1, 2))
-    # c = np.repeat(b[:, np.newaxis, :], 3, axis=1)
-    # print(c)
-    # print(a.shape)
-    # print(b.shape)
-    # print(c.shape)
+
+    fig = plt.figure()
+    axes = fig.gca()
+
+    # session=load_data_2017_1_30(from_pickle=False)
+    # session = Session.new('/home/em/prog/plugin-GUI/Builds/Linux/build/2018-04-17_21-32-26/', from_pickle=False)
+    # session = Session.new('/home/em/prog/plugin-GUI/Builds/Linux/build/2018-05-14_03-04-36', from_pickle=False)
+    # session = Session.new('/home/em/prog/plugin-GUI/Builds/Linux/build/2018-05-14_10-04-35', from_pickle=False)
+    # session = Session.new('/home/em/data/eeg_tests/2018-05-17/2018-05-17_16-46-14', from_pickle=False)
+
+    session = Session.new('/home/em/prog/plugin-GUI/Builds/Linux/build/2018-06-12_10-43-44', from_pickle=False)
+    # session = Session.new('/home/em/prog/plugin-GUI/Builds/Linux/build/2018-06-12_10-12-03', from_pickle=False)
+    # session = Session.new('/home/em/prog/plugin-GUI/Builds/Linux/build/2018-06-12_10-24-10', from_pickle=False)
+    # session = Session.new('/home/em/prog/plugin-GUI/Builds/Linux/build/2018-06-12_10-33-11', from_pickle=False)
+
+
+    # chan = 7
+    session.load_eeg([9])
+    # session.load_adc([5, 4])
+    # print(session.eeg_data.t[-1])
+    session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, use_CAR=False)
+    # session.adc_data.preprocess(downsample_factor=75, lowpass_cutoff=70, use_CAR=False)
+    # session.eeg_data.preprocess(downsample_factor=150, use_CAR=False)
+    # session.adc_data.preprocess(downsample_factor=150, use_CAR=False)
+    # session.eeg_data.preprocess(downsample_factor=75, lowpass_cutoff=70, use_CAR=False)
+
+    session.spectrum = Spectrogram(session.eeg_data)
+    session.spectrum.calculate_all()
+    session.spectrum.plot_channel(num=9, axes=axes, title='')
+
+    # width = 10
+    # props = PlotProperties()
+    # for i in range(60, 660, width):
+    #     fig = plt.figure()
+    #     # axes = fig.gca()
+    #     tmp_eeg = session.eeg_data.copy(time_range=[i, i+width]);
+    #     # tmp_eeg.plot_all(axes)
+    #     spectrum = Spectrogram(tmp_eeg)
+    #     spectrum.calculate_all()
+    #     axes = plt.subplot(2, 1, 1)
+    #     spectrum.plot_channel(index=0, axes=axes)
+
+    #     axes = plt.subplot(2, 1, 2)
+    #     tmp_adc = session.adc_data.copy(time_range=[i, i+width]);
+    #     tmp_adc.plot_all(axes)
+    plt.show()
 
 main()
