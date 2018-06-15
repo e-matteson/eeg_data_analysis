@@ -84,7 +84,11 @@ def threshold_01(x, threshold):
     return x_new
 
 def are_intervals_close(time_array, value):
-    return (np.isclose((time_array[1:] - time_array[:-1]), value).all())
+    intervals = time_array[1:] - time_array[:-1]
+    is_close = np.isclose(intervals, value)
+    # bad_indices = intervals[np.where(is_close == False)]
+    # print(bad_indices)
+    return (is_close.all())
 
 def lowpass(data, cutoff, fs, order=5):
     # TODO check dimensions

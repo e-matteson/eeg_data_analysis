@@ -36,6 +36,7 @@ class OpenEphysWrapper:
         t = np.array([np.arange(time, time+1024) for time in timestamps]).flatten() / sampleRate
         if not are_intervals_close(t, 1/sampleRate):
             raise RuntimeError('load_continuous: timestamps may be wrong')
+            # print('WARNING: load_continuous: timestamps may be wrong')
         return (x,t)
 
     def load_continuous_channels(self, prefix, data_directory, Fs_openephys, channel_nums, recording_num=1):
@@ -165,7 +166,12 @@ class AnalogData:
             if new_Fs != int(new_Fs):
                 raise RuntimeError("Can't downsample to non-integer sample rate: Fs = %f Hz" % new_Fs)
             if (lowpass_cutoff is None) or (new_Fs < lowpass_cutoff*2):
-                raise RuntimeWarning("Aliasing may occur! cutoff = %f Hz, Fs = %f Hz" % (lowpass_cutoff, new_Fs))
+                if (lowpass_cutoff is None):
+                    cutoff_string =  "(none)"
+                else:
+                    cutoff_string = "%f Hz" % lowpass_cutoff
+                # print("WARNING: Aliasing may occur! cutoff = %s, new Fs = %f Hz" % (cutoff_string, new_Fs))
+                raise RuntimeError("WARNING: Aliasing may occur! cutoff = %s, new Fs = %f Hz" % (cutoff_string, new_Fs))
             print("Downsampling to %0.2f Hz" % new_Fs)
             self.downsample(downsample_factor)
             self.Fs = new_Fs
